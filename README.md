@@ -1,4 +1,6 @@
-<img src="https://raw.githubusercontent.com/BeGiBue/home-assistant-water-softener-refill-sensor/main/docs/assets/logo-160.png" alt="Water Softener Refill Sensor" width="160">
+<p align="center">
+  <img src="https://raw.githubusercontent.com/BeGiBue/home-assistant-water-softener-refill-sensor/main/docs/assets/logo-160.png?v=2" alt="Water Softener Refill Sensor" width="160">
+</p>
 
 # Water Softener Refill Sensor für Home Assistant
 
