@@ -3,7 +3,7 @@
 Eine Home-Assistant-Integration, die zählt, **wie oft eine Enthärtungsanlage regeneriert hat**, und den **Salzbestand**
 mitrechnet. Sie meldet sich, wenn bald Salz nachgefüllt werden muss.
 
-Sie ergänzt die Karte [Heizungskeller Schema](https://github.com/BeGiBue/heizungskeller-schema), kann aber auch ganz
+Sie ergänzt die Karte [Boiler Room Scheme Card](https://github.com/BeGiBue/home-assistant-boiler-room-scheme-card), kann aber auch ganz
 ohne sie genutzt werden.
 
 ## So funktioniert es
@@ -47,14 +47,14 @@ ohne sie genutzt werden.
 
 Mit einem Klick (über My Home Assistant öffnet sich das Repository direkt in HACS deiner Home-Assistant-Instanz):
 
-[![In HACS öffnen](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=BeGiBue&repository=water-softener-refill-sensor&category=integration)
+[![In HACS öffnen](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=BeGiBue&repository=home-assistant-water-softener-refill-sensor&category=integration)
 
 Danach „Herunterladen“ wählen und Home Assistant **neu starten**.
 
 Oder von Hand:
 
 1. HACS öffnen → Menü (⋮) → **Benutzerdefinierte Repositories**.
-2. URL `https://github.com/BeGiBue/water-softener-refill-sensor` eintragen, Kategorie **Integration** wählen.
+2. URL `https://github.com/BeGiBue/home-assistant-water-softener-refill-sensor` eintragen, Kategorie **Integration** wählen.
 3. „Water Softener Refill Sensor“ herunterladen und Home Assistant neu starten.
 
 ### Manuell
@@ -128,7 +128,7 @@ erscheinen in der Sprache der Oberfläche (Deutsch oder Englisch).
 
 Beim Entladen oder Deaktivieren des Eintrags werden die Meldungen entfernt und beim Laden bei Bedarf neu angelegt.
 
-## Anbindung an die Karte „Heizungskeller Schema“
+## Anbindung an die Karte „Boiler Room Scheme Card“
 
 Die Karte hat eine Tafel „Enthärtungsanlage“ mit zwei Zeilen. Im Karteneditor, Bereich **Enthärtungsanlage**, wählst du:
 
