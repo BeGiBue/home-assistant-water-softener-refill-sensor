@@ -1,3 +1,5 @@
+<img src="https://raw.githubusercontent.com/BeGiBue/home-assistant-water-softener-refill-sensor/main/docs/assets/logo-160.png" alt="Water Softener Refill Sensor" width="160">
+
 # Water Softener Refill Sensor für Home Assistant
 
 Eine Home-Assistant-Integration, die zählt, **wie oft eine Enthärtungsanlage regeneriert hat**, und den **Salzbestand**
