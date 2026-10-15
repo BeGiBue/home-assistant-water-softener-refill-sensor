@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.2.2
+
+Bezeichnungen und Repository-Verweise konsolidiert.
+
+- GitHub- und HACS-Installationslinks auf den neuen Repository-Namen `home-assistant-water-softener-refill-sensor` umgestellt.
+- Verweis auf die ergänzende Karte unter dem neuen Projektnamen **Boiler Room Scheme Card** aktualisiert.
+- Dokumentations- und Issue-Tracker-Adressen in den Integrationsmetadaten korrigiert.
+- Keine Änderungen an Entitäten, Diensten oder bestehenden Konfigurationen.
+
 ## 1.2.1
 
 Korrekturen aus einem Code-Review.
