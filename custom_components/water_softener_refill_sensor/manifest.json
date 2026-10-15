@@ -3,10 +3,10 @@
   "name": "Water Softener Refill Sensor",
   "codeowners": ["@BeGiBue"],
   "config_flow": true,
-  "documentation": "https://github.com/BeGiBue/water-softener-refill-sensor",
+  "documentation": "https://github.com/BeGiBue/home-assistant-water-softener-refill-sensor",
   "integration_type": "service",
   "iot_class": "calculated",
-  "issue_tracker": "https://github.com/BeGiBue/water-softener-refill-sensor/issues",
+  "issue_tracker": "https://github.com/BeGiBue/home-assistant-water-softener-refill-sensor/issues",
   "requirements": [],
-  "version": "1.2.1"
+  "version": "1.2.2"
 }
