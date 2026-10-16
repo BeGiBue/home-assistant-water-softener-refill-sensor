@@ -8,5 +8,5 @@
   "iot_class": "calculated",
   "issue_tracker": "https://github.com/BeGiBue/home-assistant-water-softener-refill-sensor/issues",
   "requirements": [],
-  "version": "1.2.2"
+  "version": "1.2.3"
 }
