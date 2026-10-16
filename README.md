@@ -10,6 +10,12 @@ mitrechnet. Sie meldet sich, wenn bald Salz nachgefüllt werden muss.
 Sie ergänzt die Karte [Boiler Room Scheme Card](https://github.com/BeGiBue/home-assistant-boiler-room-scheme-card), kann aber auch ganz
 ohne sie genutzt werden.
 
+## Vorschau
+
+**Salz nachfüllen – Geräteansicht, breit (800 px)**
+
+<img src="docs/assets/water-softener-refill-device-800-light.png" width="800" alt="Echte Home-Assistant-Geräteansicht bei Salz-Nachfüllwarnung mit Steuerung, Sensoren, Konfiguration und Diagnose, 800 px Ansichtsbreite, helles Theme">
+
 ## So funktioniert es
 
 - **Regeneration erkennen:** Die Anlage regeneriert nachts, zum Beispiel zwischen 2 und 3 Uhr, und verbraucht dabei
