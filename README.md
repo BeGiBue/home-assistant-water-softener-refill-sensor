@@ -14,7 +14,7 @@ ohne sie genutzt werden.
 
 **Salz nachfüllen – Geräteansicht, breit (800 px)**
 
-<img src="docs/assets/water-softener-refill-device-800-light.png" width="800" alt="Echte Home-Assistant-Geräteansicht bei Salz-Nachfüllwarnung mit Steuerung, Sensoren, Konfiguration und Diagnose, 800 px Ansichtsbreite, helles Theme">
+<img src="https://raw.githubusercontent.com/BeGiBue/home-assistant-water-softener-refill-sensor/main/docs/assets/water-softener-refill-device-800-light.png" width="800" alt="Echte Home-Assistant-Geräteansicht bei Salz-Nachfüllwarnung mit Steuerung, Sensoren, Konfiguration und Diagnose, 800 px Ansichtsbreite, helles Theme">
 
 ## So funktioniert es
 
