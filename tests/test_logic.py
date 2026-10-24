@@ -1,5 +1,6 @@
 """Tests der reinen Logik (ohne Home Assistant). Aufruf: python3 -m unittest discover -s tests -v"""
 import importlib.util
+import math
 import os
 import sys
 import unittest
@@ -35,6 +36,55 @@ def feed(m, readings):
 
 
 class RegenerationDetection(unittest.TestCase):
+    def test_nonfinite_meter_readings_do_not_poison_state_or_bridge_the_gap(self):
+        for invalid in (float("nan"), float("inf"), -float("inf"), -1):
+            with self.subTest(invalid=invalid):
+                m = model()
+                m.on_meter(1000, at(6, 2, 1))
+                m.on_meter(invalid, at(6, 2, 2))
+                self.assertIsNone(m.state.last_value_l)
+                self.assertEqual(m.state.window_usage_l, 0)
+                m.on_meter(1100, at(6, 2, 3))
+                self.assertEqual(m.state.window_usage_l, 0)
+                m.on_meter(1101, at(6, 2, 4))
+                self.assertEqual(m.state.window_usage_l, 1)
+
+    def test_nonfinite_manual_amounts_leave_state_unchanged(self):
+        for invalid in (float("nan"), float("inf"), -float("inf")):
+            with self.subTest(invalid=invalid):
+                m = model()
+                m.set_stock(2)
+                before = m.to_dict()
+                with self.assertRaises(ValueError):
+                    m.refill(at(6, 9), invalid)
+                self.assertEqual(m.to_dict(), before)
+                with self.assertRaises(ValueError):
+                    m.set_stock(invalid)
+                self.assertEqual(m.to_dict(), before)
+
+    def test_finite_readings_cannot_overflow_window_usage(self):
+        m = model()
+        for value in (0, 1e308, 0, 1e308):
+            m.on_meter(value, at(6, 2, 1))
+        self.assertTrue(math.isfinite(m.state.window_usage_l))
+        self.assertIsNone(m.state.last_value_l)
+
+    def test_nonfinite_storage_values_recover_without_claiming_a_full_tank(self):
+        for invalid in (float("nan"), float("inf"), -float("inf"), "1e999"):
+            with self.subTest(invalid=invalid):
+                m = SoftenerModel.from_dict(model().settings, {
+                    "stock_kg": invalid, "total_regens": invalid,
+                    "regens_since_refill": invalid, "last_value_l": invalid,
+                    "window_usage_l": invalid,
+                })
+                self.assertEqual(m.state.stock_kg, 0)
+                self.assertEqual(m.state.total_regens, 0)
+                self.assertEqual(m.state.regens_since_refill, 0)
+                self.assertIsNone(m.state.last_value_l)
+                self.assertEqual(m.state.window_usage_l, 0)
+                self.assertTrue(math.isfinite(m.salt_percent))
+                self.assertTrue(m.needs_refill)
+
     def test_night_with_regeneration_is_counted_once(self):
         m = model()
         feed(m, [(at(5, 23), 1000), (at(6, 2, 2), 1010), (at(6, 2, 20), 1040), (at(6, 2, 40), 1070), (at(6, 2, 58), 1085)])

@@ -89,17 +89,25 @@ def _d(value: Any) -> date | None:
         return None
 
 
+def finite_float(value: Any) -> float:
+    """Convert a finite number; NaN and infinity are never valid measurements."""
+    number = float(value)
+    if not math.isfinite(number):
+        raise ValueError("A finite number is required")
+    return number
+
+
 def _float(value: Any, default: float | None) -> float | None:
     try:
-        return float(value)
-    except (TypeError, ValueError):
+        return finite_float(value)
+    except (TypeError, ValueError, OverflowError):
         return default
 
 
 def _int(value: Any, default: int) -> int:
     try:
-        return int(float(value))
-    except (TypeError, ValueError):
+        return int(finite_float(value))
+    except (TypeError, ValueError, OverflowError):
         return default
 
 
@@ -117,7 +125,7 @@ class SoftenerModel:
 
     # ------------------------------------------------------------------ Hilfsfunktionen
     def _clamp(self, kg: float) -> float:
-        return max(0.0, min(float(kg), float(self.settings.capacity_kg)))
+        return max(0.0, min(finite_float(kg), float(self.settings.capacity_kg)))
 
     def window_start(self, day: date, tz: Any) -> datetime:
         """Beginn des Fensters am Tag day (Ortszeit tz).
@@ -207,6 +215,10 @@ class SoftenerModel:
         """
         events = self.evaluate_pending(now)
         st = self.state
+        if not math.isfinite(value_l) or value_l < 0:
+            # A new baseline after invalid data avoids attributing the gap to a window.
+            st.last_value_l = None
+            return events
         prev = st.last_value_l
         st.last_value_l = value_l
         if baseline_only or prev is None:
@@ -220,7 +232,11 @@ class SoftenerModel:
                 st.window_date = day
                 st.window_usage_l = 0.0
                 st.window_crossed_at = None
-            st.window_usage_l += delta
+            usage = st.window_usage_l + delta
+            if not math.isfinite(usage):
+                st.last_value_l = None
+                return events
+            st.window_usage_l = usage
             if st.window_crossed_at is None and st.window_usage_l > self.settings.threshold_l:
                 st.window_crossed_at = now
         return events
@@ -280,7 +296,7 @@ class SoftenerModel:
         Der Zähler „Regenerationen seit Nachfüllen“ wird nur zurückgesetzt, wenn der Behälter danach voll ist.
         Gibt die Menge zurück, die tatsächlich im Bestand angekommen ist (kleiner als kg, wenn der Behälter überfüllt wäre).
         """
-        if kg is None or not float(kg) > 0:
+        if kg is None or not finite_float(kg) > 0:
             raise ValueError("Die nachgefüllte Menge muss größer als 0 kg sein.")
         st = self.state
         before = st.stock_kg
@@ -350,7 +366,7 @@ class SoftenerModel:
     def from_dict(cls, settings: Settings, data: dict[str, Any]) -> "SoftenerModel":
         """Gespeicherten Zustand laden. Fehlende oder unlesbare Felder bekommen Standardwerte (ältere Stände)."""
         state = State(
-            stock_kg=_float(data.get("stock_kg"), float(settings.capacity_kg)),
+            stock_kg=_float(data.get("stock_kg"), 0.0) if "stock_kg" in data else float(settings.capacity_kg),
             total_regens=_int(data.get("total_regens"), 0),
             regens_since_refill=_int(data.get("regens_since_refill"), 0),
             last_value_l=_float(data.get("last_value_l"), None),
