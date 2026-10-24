@@ -30,7 +30,8 @@
     "error": {
       "window_invalid": "Das Ende des Zeitfensters muss nach dem Beginn liegen.",
       "per_regen_too_large": "Der Salzverbrauch pro Regeneration darf nicht größer als die Behältergröße sein.",
-      "stock_too_large": "Der aktuelle Salzbestand darf nicht größer als die Behältergröße sein."
+      "stock_too_large": "Der aktuelle Salzbestand darf nicht größer als die Behältergröße sein.",
+      "invalid_number": "Bitte eine endliche Zahl eingeben."
     }
   },
   "options": {
@@ -59,7 +60,8 @@
     },
     "error": {
       "window_invalid": "Das Ende des Zeitfensters muss nach dem Beginn liegen.",
-      "per_regen_too_large": "Der Salzverbrauch pro Regeneration darf nicht größer als die Behältergröße sein."
+      "per_regen_too_large": "Der Salzverbrauch pro Regeneration darf nicht größer als die Behältergröße sein.",
+      "invalid_number": "Bitte eine endliche Zahl eingeben."
     }
   },
   "entity": {
@@ -222,6 +224,9 @@
     },
     "multiple_entries": {
       "message": "Mehrere Enthärtungsanlagen eingerichtet: bitte den Eintrag (config_entry) angeben."
+    },
+    "invalid_amount": {
+      "message": "Die Salzmenge muss eine endliche Zahl sein."
     }
   }
 }

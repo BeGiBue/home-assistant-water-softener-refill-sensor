@@ -128,6 +128,46 @@ def window_end(hass, when):
 
 
 class NightScenario(unittest.TestCase):
+    def test_config_normalization_rejects_nonfinite_numbers(self):
+        for key in ("capacity_kg", "per_regen_kg", "initial_stock_kg", "threshold_l", "window_start_hour", "window_end_hour", "warn_remaining"):
+            for invalid in ("nan", "inf", "-inf", "1e999"):
+                with self.subTest(key=key, invalid=invalid):
+                    with self.assertRaises(ValueError):
+                        config_flow._normalize({key: invalid})
+
+    def test_invalid_sensor_numbers_and_conversion_overflow_require_new_baseline(self):
+        async def scenario():
+            for invalid, unit in (("nan", "L"), ("inf", "L"), ("-inf", "L"), ("-1", "L"), ("1e308", "m³")):
+                with self.subTest(invalid=invalid, unit=unit):
+                    hass = FakeHass()
+                    mgr = SoftenerManager(hass, FakeEntry())
+                    mgr._process_state(FakeState("1000"), local(6, 2, 1))
+                    mgr._process_state(FakeState(invalid, unit), local(6, 2, 2))
+                    self.assertTrue(mgr._need_baseline)
+                    self.assertEqual(mgr.model.state.last_value_l, 1000)
+                    mgr._process_state(FakeState("1100"), local(6, 2, 3))
+                    self.assertEqual(mgr.model.state.window_usage_l, 0)
+                    mgr._process_state(FakeState("1101"), local(6, 2, 4))
+                    self.assertEqual(mgr.model.state.window_usage_l, 1)
+        asyncio.run(scenario())
+
+    def test_nonfinite_amounts_rejected_before_publishing_or_saving(self):
+        async def scenario():
+            for invalid in (float("nan"), float("inf"), -float("inf")):
+                with self.subTest(invalid=invalid):
+                    mgr = SoftenerManager(FakeHass(), FakeEntry())
+                    before = mgr.model.to_dict()
+                    for action in (mgr.async_refill, mgr.async_set_stock):
+                        with self.assertRaises(ha_stubs.ServiceValidationError) as err:
+                            await action(invalid)
+                        self.assertEqual(err.exception.translation_key, "invalid_amount")
+                        self.assertEqual(mgr.model.to_dict(), before)
+                    with self.assertRaises(ha_stubs.ServiceValidationError) as err:
+                        mgr.set_refill_input(invalid)
+                    self.assertEqual(err.exception.translation_key, "invalid_amount")
+                    self.assertEqual(mgr.refill_input_kg, 0)
+        asyncio.run(scenario())
+
     def setUp(self):
         FakeStore.DATA.clear()
         FakeNotifications.active.clear()

@@ -4,6 +4,8 @@
 
 # Water Softener Refill Sensor für Home Assistant
 
+**Version 2.0.0**
+
 Eine Home-Assistant-Integration, die zählt, **wie oft eine Enthärtungsanlage regeneriert hat**, und den **Salzbestand**
 mitrechnet. Sie meldet sich, wenn bald Salz nachgefüllt werden muss.
 
@@ -55,17 +57,23 @@ ohne sie genutzt werden.
 
 ### Über HACS (empfohlen)
 
-Mit einem Klick (über My Home Assistant öffnet sich das Repository direkt in HACS deiner Home-Assistant-Instanz):
+Das Projekt ist im offiziellen HACS-Katalog verfügbar. Ein benutzerdefiniertes Repository ist für die reguläre Installation nicht erforderlich.
+
+1. HACS öffnen und nach **Water Softener Refill Sensor** suchen.
+2. Das Projekt auswählen und **Herunterladen** wählen.
+3. Home Assistant **neu starten** und die Integration wie unten beschrieben einrichten.
 
 [![In HACS öffnen](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=BeGiBue&repository=home-assistant-water-softener-refill-sensor&category=integration)
 
-Danach „Herunterladen“ wählen und Home Assistant **neu starten**.
+### Bestehende Custom-Repository-Installation auf den HACS-Katalog umstellen
 
-Oder von Hand:
+1. Prüfen, dass **Water Softener Refill Sensor** in der HACS-Suche im offiziellen Katalog verfügbar ist. Falls der Eintrag noch fehlt, zuerst HACS und seine Repository-Informationen aktualisieren und mit der Umstellung warten.
+2. Unter **HACS → Benutzerdefinierte Repositories** nur den Eintrag für `BeGiBue/home-assistant-water-softener-refill-sensor` entfernen.
+3. Die bestehende Installation **nicht deinstallieren**; auch den Eintrag unter **Geräte & Dienste** nicht löschen.
+4. HACS neu laden bzw. die Repository-Informationen aktualisieren. Prüfen, dass das Projekt weiterhin installiert ist und Updates angeboten werden.
+5. Ein verfügbares Update installieren, Home Assistant neu starten und Entitäten sowie vorhandene Dashboards prüfen.
 
-1. HACS öffnen → Menü (⋮) → **Benutzerdefinierte Repositories**.
-2. URL `https://github.com/BeGiBue/home-assistant-water-softener-refill-sensor` eintragen, Kategorie **Integration** wählen.
-3. „Water Softener Refill Sensor“ herunterladen und Home Assistant neu starten.
+Die bestehende Einrichtung, gespeicherte Zählerstände und Dashboard-Konfigurationen bleiben bei dieser Umstellung erhalten. Die Major-Version 2.0.0 kennzeichnet die Aufnahme in den offiziellen HACS-Katalog und die Sicherheitskorrekturen; sie bedeutet **nicht automatisch Breaking Changes**. Es ist keine Änderung von Entity-IDs, Diensten oder Dashboard-Karten erforderlich.
 
 ### Manuell
 
@@ -162,6 +170,7 @@ Die Karte hat eine Tafel „Enthärtungsanlage“ mit zwei Zeilen. Im Kartenedit
   Umstellungsnacht zur **alten** Uhrzeit der Anlage passt. Die Anlagenuhr deshalb erst **nach** der Umstellungsnacht
   (Sonntag nach 03:00 Uhr) umstellen; wird sie schon vorher umgestellt, liegt ihre Regeneration in dieser Nacht neben dem
   Fenster und wird möglicherweise nicht erkannt (nachtragen mit `add_regeneration`).
+- Ungültige oder nicht endliche Zählerwerte (`NaN`, `Infinity`) und negative Zählerstände werden ignoriert. Der nächste gültige Wert setzt einen neuen Bezugswert; Verbrauch während der Datenlücke wird nicht nachträglich gezählt. Salzmenge und Bestand müssen endliche Zahlen sein.
 - Zustand (Zähler, Bestand) wird gespeichert und bleibt über Neustarts erhalten.
 - Benötigt Home Assistant 2024.12 oder neuer.
 
@@ -185,3 +194,5 @@ python3 -m pytest
 ```
 
 Arbeitsanweisungen für Claude Code stehen in `CLAUDE.md`.
+
+Details zur Sicherheitsprüfung und zu ihren Grenzen stehen in [SECURITY_REVIEW.md](SECURITY_REVIEW.md).

@@ -35,6 +35,7 @@ from .const import (
     DEFAULT_WINDOW_START,
     DOMAIN,
 )
+from .logic import finite_float
 
 
 def _number(minimum: float, maximum: float, step: float, unit: str | None = None) -> NumberSelector:
@@ -80,10 +81,10 @@ def _normalize(user_input: dict[str, Any]) -> dict[str, Any]:
     data = dict(user_input)
     for key in (CONF_WINDOW_START, CONF_WINDOW_END, CONF_WARN_REMAINING, CONF_THRESHOLD_L):
         if key in data:
-            data[key] = int(round(float(data[key])))
+            data[key] = int(round(finite_float(data[key])))
     for key in (CONF_CAPACITY_KG, CONF_PER_REGEN_KG, CONF_INITIAL_STOCK_KG):
         if key in data:
-            data[key] = float(data[key])
+            data[key] = finite_float(data[key])
     return data
 
 
@@ -107,8 +108,13 @@ class EnthaertungConfigFlow(ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
         defaults: dict[str, Any] = {}
         if user_input is not None:
-            data = _normalize(user_input)
-            errors = _validate(data)
+            try:
+                data = _normalize(user_input)
+            except (TypeError, ValueError, OverflowError):
+                errors["base"] = "invalid_number"
+                data = {}
+            else:
+                errors = _validate(data)
             if not errors:
                 return self.async_create_entry(title=data[CONF_NAME], data=data)
             defaults = data
@@ -127,8 +133,13 @@ class EnthaertungOptionsFlow(OptionsFlow):
         errors: dict[str, str] = {}
         current = {**self.config_entry.data, **self.config_entry.options}
         if user_input is not None:
-            data = _normalize(user_input)
-            errors = _validate(data)
+            try:
+                data = _normalize(user_input)
+            except (TypeError, ValueError, OverflowError):
+                errors["base"] = "invalid_number"
+                data = {}
+            else:
+                errors = _validate(data)
             if not errors:
                 return self.async_create_entry(title="", data=data)
             current = {**current, **data}

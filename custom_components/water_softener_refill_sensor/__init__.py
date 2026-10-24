@@ -28,6 +28,7 @@ from .const import (
     storage_key,
 )
 from .manager import SoftenerManager, service_error
+from .logic import finite_float
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -35,9 +36,9 @@ CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 _ENTRY = {vol.Optional(ATTR_CONFIG_ENTRY): cv.string}
 SCHEMA_REFILL = vol.Schema(
-    {**_ENTRY, vol.Required(ATTR_KG): vol.All(vol.Coerce(float), vol.Range(min=0, min_included=False))}
+    {**_ENTRY, vol.Required(ATTR_KG): vol.All(vol.Coerce(float), finite_float, vol.Range(min=0, min_included=False))}
 )
-SCHEMA_SET_STOCK = vol.Schema({**_ENTRY, vol.Required(ATTR_KG): vol.All(vol.Coerce(float), vol.Range(min=0))})
+SCHEMA_SET_STOCK = vol.Schema({**_ENTRY, vol.Required(ATTR_KG): vol.All(vol.Coerce(float), finite_float, vol.Range(min=0))})
 SCHEMA_ADD = vol.Schema(
     {
         **_ENTRY,

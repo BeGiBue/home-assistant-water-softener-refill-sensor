@@ -40,7 +40,7 @@ from .const import (
     storage_key,
     unit_notification_id,
 )
-from .logic import Settings, SoftenerModel
+from .logic import Settings, SoftenerModel, finite_float
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -212,8 +212,11 @@ class SoftenerManager:
             self._need_baseline = True
             return
         try:
-            value = float(state.state)
-        except (TypeError, ValueError):
+            value = finite_float(state.state)
+            if value < 0:
+                raise ValueError("Negative meter reading")
+        except (TypeError, ValueError, OverflowError):
+            self._need_baseline = True
             return
         raw_unit = state.attributes.get("unit_of_measurement")
         unit = normalize_volume_unit(raw_unit)
@@ -226,6 +229,11 @@ class SoftenerManager:
         baseline = self._need_baseline or (self._last_unit is not None and unit != self._last_unit)
         self._last_unit = unit
         liters = VolumeConverter.convert(value, unit, LITERS)
+        try:
+            liters = finite_float(liters)
+        except (TypeError, ValueError, OverflowError):
+            self._need_baseline = True
+            return
         events = self.model.on_meter(liters, now, baseline_only=baseline)
         self._need_baseline = False
         if events:
@@ -294,7 +302,11 @@ class SoftenerManager:
     # ------------------------------------------------------------------ Eingriffe (Tasten und Dienste)
     async def async_refill(self, kg: float | None) -> None:
         """Nachfüllen bestätigen: die Menge (kg) ist Pflicht und wird zum Bestand addiert."""
-        if kg is None or not float(kg) > 0:
+        try:
+            amount = finite_float(kg)
+        except (TypeError, ValueError, OverflowError) as err:
+            raise service_error("invalid_amount") from err
+        if not amount > 0:
             raise service_error("refill_amount_required")
         added = self.model.refill(dt_util.now(), float(kg))
         if added < float(kg) - 1e-6:
@@ -313,11 +325,19 @@ class SoftenerManager:
         self._after_manual_change()
 
     def set_refill_input(self, kg: float) -> None:
-        self.refill_input_kg = max(0.0, float(kg))
+        try:
+            amount = finite_float(kg)
+        except (TypeError, ValueError, OverflowError) as err:
+            raise service_error("invalid_amount") from err
+        self.refill_input_kg = max(0.0, amount)
         self._publish()
 
     async def async_set_stock(self, kg: float) -> None:
-        self.model.set_stock(kg)
+        try:
+            amount = finite_float(kg)
+        except (TypeError, ValueError, OverflowError) as err:
+            raise service_error("invalid_amount") from err
+        self.model.set_stock(amount)
         self._after_manual_change()
 
     @staticmethod

@@ -49,6 +49,13 @@ STOCK = "sensor.enthartungsanlage_salzbestand"
 LAST = "sensor.enthartungsanlage_letzte_regeneration"
 
 
+@pytest.mark.parametrize("schema", [SCHEMA_REFILL, SCHEMA_SET_STOCK])
+@pytest.mark.parametrize("invalid", [float("nan"), float("inf"), -float("inf"), "1e999"])
+def test_service_schemas_reject_nonfinite_amounts(schema, invalid):
+    with pytest.raises(vol.Invalid):
+        schema({"kg": invalid})
+
+
 @pytest.fixture
 async def berlin(hass: HomeAssistant):
     await hass.config.async_set_time_zone("Europe/Berlin")
