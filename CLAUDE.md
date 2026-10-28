@@ -2,9 +2,9 @@
 
 ## Projekt
 
-Home-Assistant-Integration „Water Softener Refill Sensor“, Domain **`water_softener_refill_sensor`**, Repository `BeGiBue/water-softener-refill-sensor` (HACS-Kategorie *Integration*): zählt die Regenerationen einer
+Home-Assistant-Integration „Water Softener Refill Sensor“, Domain **`water_softener_refill_sensor`**, Repository `BeGiBue/home-assistant-water-softener-refill-sensor` (HACS-Kategorie *Integration*): zählt die Regenerationen einer
 Enthärtungsanlage über den Wasserzähler und rechnet den Salzbestand mit. Zugehörige Dashboard-Karte:
-`BeGiBue/heizungskeller-schema` (Tafel „Enthärtungsanlage“, Felder `softener_regeneration` und `softener_salt`).
+`BeGiBue/home-assistant-boiler-room-scheme-card` (Tafel „Enthärtungsanlage“, Felder `softener_regeneration` und `softener_salt`).
 
 ## Aufbau (`custom_components/water_softener_refill_sensor/`)
 
@@ -16,6 +16,7 @@ Enthärtungsanlage über den Wasserzähler und rechnet den Salzbestand mit. Zuge
 | `config_flow.py` | Einrichtung und Optionen (Selektoren, Validierung) |
 | `entity.py`, `sensor.py`, `binary_sensor.py`, `button.py`, `number.py`, `datetime.py` | Entitäten (`number.py`: Eingabe der Nachfüllmenge für die Taste und Korrektur „Regenerationen seit Nachfüllen“; `datetime.py`: Korrektur „Letzte Regeneration“; Koordinator-Entitäten, `has_entity_name`, Namen über `translation_key`) |
 | `services.yaml`, `translations/{de,en}.json` | Dienstbeschreibung, Texte; **de und en immer gemeinsam pflegen** |
+| `const.py` | Schlüssel und Standardwerte der Optionen |
 | `manifest.json` | Metadaten; `version` ist die Versionsnummer des Releases |
 
 ## Regeln
@@ -49,6 +50,6 @@ Enthärtungsanlage über den Wasserzähler und rechnet den Salzbestand mit. Zuge
 
 ## Veröffentlichen
 
-Version in `manifest.json` erhöhen, Abschnitt `## X.Y.Z` in `CHANGELOG.md` ergänzen, README abgleichen, Tests
-ausführen, committen und auf `main` pushen. Der Workflow `.github/workflows/release.yml` legt dann Tag `vX.Y.Z` und
-GitHub-Release (Notes aus `CHANGELOG.md`) automatisch an (siehe `.claude/commands/release.md`).
+Version in `manifest.json` erhöhen, Abschnitt `## X.Y.Z` in `CHANGELOG.md` ergänzen (fehlt er, bricht der Workflow ab), README abgleichen, Tests
+ausführen, committen und auf `main` pushen. Nach grüner Validierung legt `.github/workflows/release.yml` Tag `vX.Y.Z` und
+GitHub-Release (Notes aus dem CHANGELOG-Abschnitt; ein vorhandenes Release bleibt unverändert) automatisch an (siehe `.claude/commands/release.md`).
