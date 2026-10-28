@@ -149,9 +149,6 @@ class SoftenerModel:
                 return day
         return None
 
-    def in_window(self, now: datetime) -> bool:
-        return self.window_day(now) is not None
-
     def last_closed_day(self, now: datetime) -> date:
         """Tag des zuletzt beendeten Fensters (heute, wenn dessen Auswertezeitpunkt erreicht ist, sonst gestern)."""
         today = now.date()

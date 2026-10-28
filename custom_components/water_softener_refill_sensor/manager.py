@@ -308,11 +308,11 @@ class SoftenerManager:
             raise service_error("invalid_amount") from err
         if not amount > 0:
             raise service_error("refill_amount_required")
-        added = self.model.refill(dt_util.now(), float(kg))
-        if added < float(kg) - 1e-6:
+        added = self.model.refill(dt_util.now(), amount)
+        if added < amount - 1e-6:
             _LOGGER.warning(
                 "Nachgefüllt: %.2f kg, im Behälter ist aber nur Platz für %.2f kg; der Bestand wurde auf die Behältergröße begrenzt",
-                float(kg),
+                amount,
                 added,
             )
         self.refill_input_kg = 0.0

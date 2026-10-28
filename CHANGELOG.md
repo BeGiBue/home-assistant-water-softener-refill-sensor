@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.0.1
+
+- Aufräumen: Dokumentation und Release-Workflow bereinigt.
+- Ungenutzter Code entfernt.
+- Keine Funktionsänderung.
+
 ## 2.0.0
 
 - Aufnahme in den offiziellen HACS-Katalog: Installation über die HACS-Suche ist jetzt der Standardweg.
