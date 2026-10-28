@@ -1,8 +1,8 @@
 name: Release
 
 # Legt für die Version aus custom_components/water_softener_refill_sensor/manifest.json automatisch Tag und GitHub-Release an,
-# sobald diese Version auf main liegt und noch kein Release dafür existiert. Gibt es das Release schon,
-# werden nur seine Notes aus CHANGELOG.md aktualisiert.
+# sobald diese Version auf main liegt und noch kein Release dafür existiert. Der Release-Text ist der Abschnitt
+# „## <Version>“ aus CHANGELOG.md; fehlt er oder ist er leer, bricht der Lauf ab. Ein vorhandenes Release bleibt unverändert.
 #
 # Läuft erst, wenn der Workflow „Validate“ (Hassfest, HACS, Tests) für denselben Push auf main grün ist
 # (workflow_run). Ein Push-Auslöser kann nicht auf einen anderen Workflow warten. Hinweis: workflow_run
@@ -54,9 +54,15 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
       - name: Release-Notes aus CHANGELOG.md
+        if: steps.v.outputs.exists == 'false'
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
         run: |
-          awk -v v="## ${{ steps.v.outputs.version }}" '$0==v{f=1;next} /^## /{f=0} f' CHANGELOG.md > notes.md
-          test -s notes.md || echo "Release v${{ steps.v.outputs.version }}" > notes.md
+          awk -v v="$VERSION" '/^## / { if (found) exit; if ($2 == v) { found=1; next } } found { print }' CHANGELOG.md > notes.md
+          if ! grep -q '[^[:space:]]' notes.md; then
+            echo "Kein Abschnitt „## ${VERSION}“ mit Inhalt in CHANGELOG.md, kein Release." >&2
+            exit 1
+          fi
       - uses: softprops/action-gh-release@v2
         if: steps.v.outputs.exists == 'false'
         with:
@@ -64,6 +70,3 @@ jobs:
           target_commitish: ${{ env.SHA }}
           name: v${{ steps.v.outputs.version }}
           body_path: notes.md
-      - name: Release-Notes eines vorhandenen Releases aktualisieren
-        if: steps.v.outputs.exists == 'true'
-        run: gh release edit "v${{ steps.v.outputs.version }}" --repo "$GITHUB_REPOSITORY" --notes-file notes.md

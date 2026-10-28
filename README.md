@@ -73,7 +73,7 @@ Das Projekt ist im offiziellen HACS-Katalog verfügbar. Ein benutzerdefiniertes 
 4. HACS neu laden bzw. die Repository-Informationen aktualisieren. Prüfen, dass das Projekt weiterhin installiert ist und Updates angeboten werden.
 5. Ein verfügbares Update installieren, Home Assistant neu starten und Entitäten sowie vorhandene Dashboards prüfen.
 
-Die bestehende Einrichtung, gespeicherte Zählerstände und Dashboard-Konfigurationen bleiben bei dieser Umstellung erhalten. Die Major-Version 2.0.0 kennzeichnet die Aufnahme in den offiziellen HACS-Katalog und die Sicherheitskorrekturen; sie bedeutet **nicht automatisch Breaking Changes**. Es ist keine Änderung von Entity-IDs, Diensten oder Dashboard-Karten erforderlich.
+Einrichtung, gespeicherte Zählerstände und Dashboards bleiben erhalten; Entity-IDs, Dienste und Karten ändern sich nicht (Version 2.0.0 ist kein Breaking Change).
 
 ### Manuell
 
@@ -161,8 +161,6 @@ Die Karte hat eine Tafel „Enthärtungsanlage“ mit zwei Zeilen. Im Kartenedit
 - Der Wasserzähler sollte seinen Stand **laufend** aktualisieren (nicht nur alle Stunde), damit der Verbrauch im
   Zeitfenster erfasst wird. Nach einem Neustart, wenn der Zähler zwischenzeitlich „nicht verfügbar“ war oder seine Einheit
   wechselt, wird nur ein neuer Bezugswert gesetzt; der Verbrauch dazwischen wird bewusst nicht gezählt.
-- Unbekannte oder fehlende Einheit: Der Zählerstand wird nicht gezählt, es erscheint die Meldung „Einheit des
-  Wasserzählers unbekannt“.
 - Der Salzverbrauch pro Regeneration wird als **konstant** angenommen. Der Bestand ist rein rechnerisch und ersetzt
   keinen Blick in den Salzbehälter.
 - Das Zeitfenster darf nicht über Mitternacht gehen (Beginn muss vor dem Ende liegen).
@@ -173,26 +171,3 @@ Die Karte hat eine Tafel „Enthärtungsanlage“ mit zwei Zeilen. Im Kartenedit
 - Ungültige oder nicht endliche Zählerwerte (`NaN`, `Infinity`) und negative Zählerstände werden ignoriert. Der nächste gültige Wert setzt einen neuen Bezugswert; Verbrauch während der Datenlücke wird nicht nachträglich gezählt. Salzmenge und Bestand müssen endliche Zahlen sein.
 - Zustand (Zähler, Bestand) wird gespeichert und bleibt über Neustarts erhalten.
 - Benötigt Home Assistant 2024.12 oder neuer.
-
-## Entwicklung
-
-Die Berechnung steckt in `custom_components/water_softener_refill_sensor/logic.py` und kommt ohne Home Assistant aus. Tests:
-
-```bash
-python3 -m unittest discover -s tests -v
-```
-
-`tests/test_logic.py` prüft die Berechnung, `tests/test_integration_smoke.py` spielt mit Attrappen der Home-Assistant-
-Schnittstellen eine ganze Nacht durch (Zählerstände, Regeneration, Meldung, Bestätigung, Neustart, Dienste),
-`tests/test_translations.py` vergleicht de/en. Die Attrappen prüfen den eigenen Code, **nicht** die Kompatibilität zur
-echten Home-Assistant-API. Dafür gibt es Tests mit echtem Home Assistant (Einrichtung, Optionen, Entitäten, Dienste,
-Zeitplan inkl. Zeitumstellung, Einheiten, Laden/Entladen), die auch in der CI laufen (2024.12 und 2026.2):
-
-```bash
-pip install -r requirements_test.txt
-python3 -m pytest
-```
-
-Arbeitsanweisungen für Claude Code stehen in `CLAUDE.md`.
-
-Details zur Sicherheitsprüfung und zu ihren Grenzen stehen in [SECURITY_REVIEW.md](SECURITY_REVIEW.md).
