@@ -4,7 +4,7 @@
 
 # Water Softener Refill Sensor für Home Assistant
 
-**Version 2.0.1**
+**Version 2.0.2**
 
 Eine Home-Assistant-Integration, die zählt, **wie oft eine Enthärtungsanlage regeneriert hat**, und den **Salzbestand**
 mitrechnet. Sie meldet sich, wenn bald Salz nachgefüllt werden muss.
