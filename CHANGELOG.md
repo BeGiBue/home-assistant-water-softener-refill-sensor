@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.0.2
+
+- Brand-Bilder für Home Assistant und HACS: `logo.png` und `logo@2x.png` im `brand`-Ordner ergänzt, damit Icon und Logo in der HACS-Liste und in Home Assistant erscheinen.
+- Keine Funktionsänderung.
+
 ## 2.0.1
 
 - Aufräumen: Dokumentation und Release-Workflow bereinigt.
