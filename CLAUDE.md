@@ -35,7 +35,7 @@ Enthärtungsanlage über den Wasserzähler und rechnet den Salzbestand mit. Zuge
    Eintrag in der Tabelle der `README.md`.
 6. Mindestversion Home Assistant steht in `hacs.json` (`homeassistant`); `config_entry`-Zugriff im Optionsfluss setzt
    2024.11+ voraus.
-7. Texte für den Nutzer sind deutsch; Übersetzungen en gleichwertig halten. Fehler der Dienste als
+7. Texte für den Nutzer gibt es auf Englisch (Standard) und Deutsch (bei deutscher Sprache von Home Assistant); beide gleichwertig halten. Die README ist zweisprachig (erst Englisch, dann Deutsch). Fehler der Dienste als
    `ServiceValidationError` mit `translation_key` (Texte unter `exceptions`, Hilfsfunktion `service_error` in
    `manager.py`); `tests/test_translations.py` prüft, dass de/en deckungsgleich und alle Schlüssel vorhanden sind.
 8. Zeitfenster (in `logic.py` festgehalten, bitte nicht „reparieren“):

@@ -13,8 +13,14 @@ CONF_WINDOW_START = "window_start_hour"
 CONF_WINDOW_END = "window_end_hour"
 CONF_WARN_REMAINING = "warn_remaining"
 
-DEFAULT_NAME = "Enthärtungsanlage"
-DEFAULT_CAPACITY_KG = 25.0
+DEFAULT_NAME = "Water softener"
+DEFAULT_NAME_DE = "Enthärtungsanlage"
+
+
+def default_name(language: str | None) -> str:
+    """Standardname je nach Sprache von Home Assistant (Deutsch oder sonst Englisch)."""
+    return DEFAULT_NAME_DE if str(language or "").lower().startswith("de") else DEFAULT_NAME
+DEFAULT_CAPACITY_KG = 17.0
 DEFAULT_PER_REGEN_KG = 1.28
 DEFAULT_THRESHOLD_L = 45
 DEFAULT_WINDOW_START = 2

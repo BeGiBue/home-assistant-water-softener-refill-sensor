@@ -34,6 +34,7 @@ from .const import (
     DEFAULT_WINDOW_END,
     DEFAULT_WINDOW_START,
     DOMAIN,
+    default_name,
 )
 from .logic import finite_float
 
@@ -106,7 +107,7 @@ class EnthaertungConfigFlow(ConfigFlow, domain=DOMAIN):
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         errors: dict[str, str] = {}
-        defaults: dict[str, Any] = {}
+        defaults: dict[str, Any] = {CONF_NAME: default_name(self.hass.config.language)}
         if user_input is not None:
             try:
                 data = _normalize(user_input)

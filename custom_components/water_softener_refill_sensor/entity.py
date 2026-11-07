@@ -21,6 +21,10 @@ class EnthaertungEntity(CoordinatorEntity[DataUpdateCoordinator]):
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
             name=entry.title,
-            model="Regenerations- und Salzüberwachung",
+            model=(
+                "Regenerations- und Salzüberwachung"
+                if str(getattr(getattr(getattr(coordinator, "hass", None), "config", None), "language", "")).lower().startswith("de")
+                else "Regeneration and salt monitoring"
+            ),
             entry_type=DeviceEntryType.SERVICE,
         )
