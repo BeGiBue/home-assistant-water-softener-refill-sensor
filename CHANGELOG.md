@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.1.0
+
+- English by default, German when Home Assistant is set to German: also the default device name ("Water softener" / „Enthärtungsanlage“) and the device model. Existing devices keep their name. / Standardmäßig Englisch, Deutsch bei deutscher Sprache von Home Assistant: jetzt auch Standardname des Geräts und Gerätemodell. Bestehende Geräte behalten ihren Namen.
+- Default brine tank capacity for new setups is 17 kg (usable amount of a nominal 25 kg tank). Existing setups are unchanged. / Standard-Behältergröße für neue Einrichtungen ist 17 kg (nutzbare Menge eines nominell 25-kg-Behälters). Bestehende Einrichtungen bleiben unverändert.
+- README shortened and available in English and German. / README gekürzt und auf Englisch und Deutsch verfügbar.
+
 ## 2.0.2
 
 - Brand-Bilder für Home Assistant und HACS: `logo.png` und `logo@2x.png` im `brand`-Ordner ergänzt, damit Icon und Logo in der HACS-Liste und in Home Assistant erscheinen.
