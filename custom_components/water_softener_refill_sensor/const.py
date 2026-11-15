@@ -1,6 +1,8 @@
 """Konstanten der Integration Enthärtungsanlage."""
 from homeassistant.const import Platform
 
+from .logic import CLOCK_STANDARD
+
 DOMAIN = "water_softener_refill_sensor"
 PLATFORMS = [Platform.SENSOR, Platform.BINARY_SENSOR, Platform.BUTTON, Platform.NUMBER, Platform.DATETIME]
 
@@ -12,20 +14,29 @@ CONF_THRESHOLD_L = "threshold_l"
 CONF_WINDOW_START = "window_start_hour"
 CONF_WINDOW_END = "window_end_hour"
 CONF_WARN_REMAINING = "warn_remaining"
+CONF_CLOCK_MODE = "clock_mode"
 
 DEFAULT_NAME = "Water softener"
 DEFAULT_NAME_DE = "Enthärtungsanlage"
 
 
+def is_german(language: str | None) -> bool:
+    return str(language or "").lower().startswith("de")
+
+
 def default_name(language: str | None) -> str:
     """Standardname je nach Sprache von Home Assistant (Deutsch oder sonst Englisch)."""
-    return DEFAULT_NAME_DE if str(language or "").lower().startswith("de") else DEFAULT_NAME
+    return DEFAULT_NAME_DE if is_german(language) else DEFAULT_NAME
+
+
 DEFAULT_CAPACITY_KG = 17.0
 DEFAULT_PER_REGEN_KG = 1.28
 DEFAULT_THRESHOLD_L = 45
 DEFAULT_WINDOW_START = 2
 DEFAULT_WINDOW_END = 3
 DEFAULT_WARN_REMAINING = 3
+# Die Anlage stellt ihre Uhr nicht selbst um; Standard: sie bleibt ganzjährig auf Winterzeit
+DEFAULT_CLOCK_MODE = CLOCK_STANDARD
 
 ATTR_CONFIG_ENTRY = "config_entry"
 ATTR_KG = "kg"

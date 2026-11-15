@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.2.0
+
+- New setting "Softener clock": stays on standard (winter) time, stays on daylight saving time, or adjusted by hand. / Neue Einstellung „Uhr der Anlage“: bleibt auf Winterzeit, bleibt auf Sommerzeit oder wird von Hand umgestellt.
+- **Changed default:** the softener clock is assumed to stay on standard time, also for existing setups. If you adjust the clock by hand, choose that once under Configure, otherwise the window is one hour off during daylight saving time. / **Geänderter Standard:** Die Anlagenuhr bleibt auf Winterzeit, auch bei bestehenden Einrichtungen. Wer die Uhr von Hand umstellt, wählt das einmal unter Konfigurieren, sonst liegt das Fenster in der Sommerzeit eine Stunde daneben.
+- A short meter outage or a restart inside the time window no longer loses the water used meanwhile. / Kurzer Zählerausfall oder Neustart im Zeitfenster verliert den Verbrauch dazwischen nicht mehr.
+- Fixed: a time window changed on the same day is evaluated correctly. / Behoben: Ein am selben Tag geändertes Zeitfenster wird richtig ausgewertet.
+- Fixed: an error during evaluation no longer stops the schedule; a failed start leaves no listeners behind. / Behoben: Ein Fehler bei der Auswertung stoppt den Zeitplan nicht mehr; ein gescheiterter Start hinterlässt keine Listener.
+- "Correct last regeneration" also updates the history. / „Letzte Regeneration korrigieren“ pflegt auch den Verlauf.
+- Notification texts moved to the translations, English dates as YYYY-MM-DD, log messages in English. / Meldungstexte in den Übersetzungen, englisches Datum als JJJJ-MM-TT, Log-Meldungen auf Englisch.
+
 ## 2.1.0
 
 - English by default, German when Home Assistant is set to German: also the default device name ("Water softener" / „Enthärtungsanlage“) and the device model. Existing devices keep their name. / Standardmäßig Englisch, Deutsch bei deutscher Sprache von Home Assistant: jetzt auch Standardname des Geräts und Gerätemodell. Bestehende Geräte behalten ihren Namen.

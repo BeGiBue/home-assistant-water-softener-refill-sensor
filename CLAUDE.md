@@ -11,7 +11,7 @@ Enthärtungsanlage über den Wasserzähler und rechnet den Salzbestand mit. Zuge
 | Datei | Zweck |
 |---|---|
 | `logic.py` | **Reine Logik ohne Home-Assistant-Importe**: Zeitfenster, Erkennung, Salzbestand, (De-)Serialisierung |
-| `manager.py` | Verbindet die Logik mit Home Assistant: Zähler beobachten, Zeitplan, Speicher, Meldung, Koordinator |
+| `manager.py` | Verbindet die Logik mit Home Assistant: Zähler beobachten, Zeitplan, Speicher, Meldung, Koordinator. Meldungstexte stehen unter `issues` in den Übersetzungen, Log-Meldungen sind englisch |
 | `__init__.py` | Setup/Unload/Remove des Eintrags, Dienste (`refill`, `set_salt_stock`, `add_regeneration`, `set_last_regeneration`, `set_regenerations_since_refill`) |
 | `config_flow.py` | Einrichtung und Optionen (Selektoren, Validierung) |
 | `entity.py`, `sensor.py`, `binary_sensor.py`, `button.py`, `number.py`, `datetime.py` | Entitäten (`number.py`: Eingabe der Nachfüllmenge für die Taste und Korrektur „Regenerationen seit Nachfüllen“; `datetime.py`: Korrektur „Letzte Regeneration“; Koordinator-Entitäten, `has_entity_name`, Namen über `translation_key`) |
@@ -41,11 +41,14 @@ Enthärtungsanlage über den Wasserzähler und rechnet den Salzbestand mit. Zuge
 8. Zeitfenster (in `logic.py` festgehalten, bitte nicht „reparieren“):
    - Erfasst wird vom Fensterbeginn bis **Fensterende + 1 Minute** (= Auswertezeitpunkt), damit verspätet gemeldete
      Zählerwerte noch zählen. Ein Wert genau zum Auswertezeitpunkt zählt nicht mehr.
-   - Fenster in echter Zeit: Beginn = eingestellte Stunde in Ortszeit (doppelte Zeit: die erste; fehlende Zeit: nach
-     vorn verschoben), Länge = Ende − Beginn in echten Stunden, alle Vergleiche in UTC. Tatsache: Die Anlage stellt
-     ihre Uhr nicht selbst um, der Nutzer stellt sie nach der Umstellungsnacht von Hand um; in dieser Nacht läuft sie
-     noch auf der alten Zeit, und genau dazu passt das berechnete Fenster (März 03–04 MESZ, Oktober erste 02-Uhr-Stunde).
-     Der Manager plant die Auswertung mit `async_track_point_in_utc_time`.
+   - Fenster in Anlagenzeit: Die Anlage stellt ihre Uhr nicht selbst um. Die Option „Uhr der Anlage“ (`clock_mode`)
+     bestimmt die Uhr, nach der das Fenster gilt: `standard` (Standard, auch für Einrichtungen ohne die Option: bleibt
+     auf Winterzeit, fester Versatz, Umstellungsnächte kein Sonderfall), `dst` (bleibt auf Sommerzeit) oder `manual`
+     (wird nach der Umstellungsnacht von Hand umgestellt: Beginn in Ortszeit, März 03–04 MESZ, Oktober erste
+     02-Uhr-Stunde). Länge = Ende − Beginn in echten Stunden, alle Vergleiche in UTC, „Tag“ des Fensters = Datum der
+     Anlagenuhr. Der Manager plant die Auswertung mit `async_track_point_in_utc_time`.
+   - Lücken (Zähler nicht verfügbar, Neustart) zählen nur, wenn der letzte Wert im selben Fenster lag (`bridge_gap`);
+     nach ungültigen Werten oder Einheitenproblemen wird immer nur ein Bezugswert gesetzt.
    - Einheiten des Wasserzählers rechnet nur der Manager um (`VolumeConverter`); `logic.py` bleibt ohne HA-Importe.
 
 ## Veröffentlichen

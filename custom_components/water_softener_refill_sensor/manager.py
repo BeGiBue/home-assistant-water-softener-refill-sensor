@@ -19,6 +19,7 @@ from homeassistant.util.unit_conversion import VolumeConverter
 
 from .const import (
     CONF_CAPACITY_KG,
+    CONF_CLOCK_MODE,
     CONF_INITIAL_STOCK_KG,
     CONF_PER_REGEN_KG,
     CONF_THRESHOLD_L,
@@ -27,6 +28,7 @@ from .const import (
     CONF_WINDOW_END,
     CONF_WINDOW_START,
     DEFAULT_CAPACITY_KG,
+    DEFAULT_CLOCK_MODE,
     DEFAULT_PER_REGEN_KG,
     DEFAULT_THRESHOLD_L,
     DEFAULT_WARN_REMAINING,
@@ -35,12 +37,13 @@ from .const import (
     DOMAIN,
     SAVE_DELAY,
     STORAGE_VERSION,
+    is_german,
     notification_id,
     overdue_notification_id,
     storage_key,
     unit_notification_id,
 )
-from .logic import Settings, SoftenerModel, finite_float
+from .logic import CLOCK_MODES, Settings, SoftenerModel, finite_float
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -72,57 +75,11 @@ def service_error(key: str, **placeholders: Any) -> ServiceValidationError:
         translation_placeholders={k: str(v) for k, v in placeholders.items()} or None,
     )
 
-MESSAGES = {
-    "de": {
-        "title": "Salz nachfüllen",
-        "message": (
-            "Der rechnerische Salzvorrat der Enthärtungsanlage „{name}“ reicht nur noch für {left} {unit} "
-            "({stock} kg von {capacity} kg).\n\n"
-            "Bitte Salz nachfüllen und die nachgefüllte Menge in kg bestätigen: Menge bei „Nachgefüllte Salzmenge“ "
-            "(Gerät „{name}“) eingeben und Taste „Salz nachgefüllt“ drücken, bei vollem Behälter genügt die Taste "
-            "„Behälter voll“, oder Dienst `water_softener_refill_sensor.refill` mit `kg` aufrufen. Diese Meldung bleibt bestehen, bis eine Menge bestätigt wurde und der Bestand wieder über der "
-            "Warnschwelle liegt."
-        ),
-        "one": "Regeneration",
-        "many": "Regenerationen",
-        "overdue_title": "Regeneration überfällig",
-        "overdue_message": (
-            "Bei der Enthärtungsanlage „{name}“ wurde am Fälligkeitstag ({due}) keine Regeneration erkannt "
-            "(letzte erkannte Regeneration: {last}). Die Anlage regeneriert spätestens 7 Tage nach der letzten "
-            "Regeneration.\n\n"
-            "Mögliche Ursachen: Der Wasserzähler war im Zeitfenster nicht verfügbar, oder die Anlage ist gestört. "
-            "Eine tatsächlich erfolgte Regeneration lässt sich mit dem Dienst `water_softener_refill_sensor.add_regeneration` "
-            "nachtragen (optional mit Zeitpunkt `datetime`). "
-            "Diese Meldung verschwindet, sobald wieder eine Regeneration gezählt wird."
-        ),
-    },
-    "en": {
-        "title": "Refill salt",
-        "message": (
-            "The calculated salt stock of the water softener “{name}” only lasts for {left} more {unit} "
-            "({stock} kg of {capacity} kg).\n\n"
-            "Please refill salt and confirm the amount in kg: enter it at “Salt amount refilled” (device “{name}”) "
-            "and press the button “Salt refilled”, press “Tank full” if the tank is full, or call the service `water_softener_refill_sensor.refill` with `kg`. This notice "
-            "stays until an amount is confirmed and the stock is above the warning threshold again."
-        ),
-        "one": "regeneration",
-        "many": "regenerations",
-        "overdue_title": "Regeneration overdue",
-        "overdue_message": (
-            "No regeneration was detected for the water softener “{name}” on the due day ({due}) "
-            "(last detected regeneration: {last}). The softener regenerates at the latest 7 days after the last "
-            "regeneration.\n\n"
-            "Possible causes: the water meter was unavailable during the time window, or the softener is faulty. "
-            "A regeneration that did take place can be added with the service `water_softener_refill_sensor.add_regeneration` "
-            "(optionally with the time `datetime`). "
-            "This notice disappears as soon as a regeneration is counted again."
-        ),
-    },
-}
 
 
 def settings_from_entry(entry: ConfigEntry) -> Settings:
     cfg = {**entry.data, **entry.options}
+    clock_mode = cfg.get(CONF_CLOCK_MODE, DEFAULT_CLOCK_MODE)
     return Settings(
         capacity_kg=float(cfg.get(CONF_CAPACITY_KG, DEFAULT_CAPACITY_KG)),
         per_regen_kg=float(cfg.get(CONF_PER_REGEN_KG, DEFAULT_PER_REGEN_KG)),
@@ -130,6 +87,7 @@ def settings_from_entry(entry: ConfigEntry) -> Settings:
         start_hour=int(cfg.get(CONF_WINDOW_START, DEFAULT_WINDOW_START)),
         end_hour=int(cfg.get(CONF_WINDOW_END, DEFAULT_WINDOW_END)),
         warn_remaining=int(cfg.get(CONF_WARN_REMAINING, DEFAULT_WARN_REMAINING)),
+        clock_mode=clock_mode if clock_mode in CLOCK_MODES else DEFAULT_CLOCK_MODE,
     )
 
 
@@ -157,6 +115,9 @@ class SoftenerManager:
         self._unsubs: list[Callable[[], None]] = []
         self._unsub_timer: Callable[[], None] | None = None
         self._need_baseline = True  # nach dem Start zuerst nur einen Bezugswert setzen
+        # Lücke überbrücken, wenn der letzte Wert im selben Fenster lag (Neustart, Zähler kurz nicht verfügbar);
+        # nicht nach ungültigen Werten oder Problemen mit der Einheit
+        self._bridge_gap = True
         self._last_unit: str | None = None  # Einheit des letzten gezählten Werts
         self._unit_problem: str | None = None  # unbekannte Einheit, für die eine Meldung besteht
         self._issue_texts: dict[str, str] = {}
@@ -187,11 +148,15 @@ class SoftenerManager:
         self._update_notification()
         self._save_later()
 
-    async def async_stop(self) -> None:
+    def async_abort(self) -> None:
+        """Listener und Zeitplan abmelden, ohne zu speichern."""
         self._cancel_timer()
         for unsub in self._unsubs:
             unsub()
         self._unsubs.clear()
+
+    async def async_stop(self) -> None:
+        self.async_abort()
         await self._store.async_save(self.model.to_dict())
 
     # ------------------------------------------------------------------ Zeitplan
@@ -207,7 +172,7 @@ class SoftenerManager:
             self._unsub_timer = None
 
     # ------------------------------------------------------------------ Wasserzähler
-    def _process_state(self, state: State, now) -> None:
+    def _process_state(self, state: State, now: datetime) -> None:
         if state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
             self._need_baseline = True
             return
@@ -216,26 +181,28 @@ class SoftenerManager:
             if value < 0:
                 raise ValueError("Negative meter reading")
         except (TypeError, ValueError, OverflowError):
-            self._need_baseline = True
+            self._need_baseline, self._bridge_gap = True, False
             return
         raw_unit = state.attributes.get("unit_of_measurement")
         unit = normalize_volume_unit(raw_unit)
         if unit is None:
             # Unbekannte oder fehlende Einheit: nichts zählen; der nächste Wert mit bekannter Einheit ist Bezugswert
-            self._need_baseline = True
+            self._need_baseline, self._bridge_gap = True, False
             self._report_unit_problem(str(raw_unit) if raw_unit else "–")
             return
         self._clear_unit_problem()
-        baseline = self._need_baseline or (self._last_unit is not None and unit != self._last_unit)
+        unit_changed = self._last_unit is not None and unit != self._last_unit
+        baseline = self._need_baseline or unit_changed
+        bridge = baseline and self._bridge_gap and not unit_changed
         self._last_unit = unit
         liters = VolumeConverter.convert(value, unit, LITERS)
         try:
             liters = finite_float(liters)
         except (TypeError, ValueError, OverflowError):
-            self._need_baseline = True
+            self._need_baseline, self._bridge_gap = True, False
             return
-        events = self.model.on_meter(liters, now, baseline_only=baseline)
-        self._need_baseline = False
+        events = self.model.on_meter(liters, now, baseline_only=baseline, bridge_gap=bridge)
+        self._need_baseline, self._bridge_gap = False, True
         if events:
             self._log_events(events)
             self._update_notification()
@@ -245,19 +212,14 @@ class SoftenerManager:
             return
         self._unit_problem = unit
         _LOGGER.warning(
-            "Einheit %r von %s ist keine bekannte Volumeneinheit; der Zählerstand wird nicht gezählt", unit, self.water_entity
+            "Unit %r of %s is not a known volume unit; the meter reading is not counted", unit, self.water_entity
         )
-        prefix = f"component.{DOMAIN}.issues.unknown_unit"
-        placeholders = {"name": self.entry.title, "entity": self.water_entity, "unit": unit}
-        title = self._issue_texts.get(f"{prefix}.title", "Unknown unit of the water meter")
-        message = self._issue_texts.get(
-            f"{prefix}.description", "The unit {unit} of {entity} is not a known volume unit."
-        )
-        persistent_notification.async_create(
-            self.hass,
-            message.format(**placeholders),
-            title=title.format(**placeholders),
-            notification_id=unit_notification_id(self.entry.entry_id),
+        self._notify(
+            unit_notification_id(self.entry.entry_id),
+            "unknown_unit",
+            name=self.entry.title,
+            entity=self.water_entity,
+            unit=unit,
         )
 
     def _clear_unit_problem(self) -> None:
@@ -278,26 +240,31 @@ class SoftenerManager:
     def _handle_window_end(self, now: datetime) -> None:
         """Planmäßige Auswertung kurz nach dem Ende des Zeitfensters; danach den nächsten Termin setzen."""
         self._unsub_timer = None
-        local = dt_util.as_local(now)
-        events = self.model.evaluate_pending(local, scheduled=True)
-        if events:
-            self._log_events(events)
-        self._update_notification()
-        self._publish()
-        self._save_later()
-        self._schedule_evaluation(local)
+        # Löst der Zeitplan verspätet aus, zählt die tatsächliche Zeit (sonst bliebe ein jüngeres Fenster offen)
+        local = max(dt_util.as_local(now), dt_util.now())
+        try:
+            events = self.model.evaluate_pending(local, scheduled=True)
+            if events:
+                self._log_events(events)
+            self._update_notification()
+            self._publish()
+            self._save_later()
+        except Exception:  # noqa: BLE001 - ein Fehler darf den Zeitplan nicht dauerhaft beenden
+            _LOGGER.exception("Evaluation of the time window failed")
+        finally:
+            self._schedule_evaluation(local)
 
     def _log_events(self, events: list[dict[str, Any]]) -> None:
         for event in events:
             if event["type"] == "regeneration":
                 _LOGGER.info(
-                    "Regeneration erkannt (%s: %.1f L im Zeitfenster), Restbestand %s Regenerationen",
+                    "Regeneration detected (%s: %.1f L within the time window), %s regenerations left",
                     event["date"],
                     event["usage_l"],
                     self.model.remaining_regens,
                 )
             elif event["type"] == "window_closed":
-                _LOGGER.debug("Zeitfenster %s abgeschlossen: %.1f L", event["date"], event["usage_l"])
+                _LOGGER.debug("Time window %s closed: %.1f L", event["date"], event["usage_l"])
 
     # ------------------------------------------------------------------ Eingriffe (Tasten und Dienste)
     async def async_refill(self, kg: float | None) -> None:
@@ -311,7 +278,7 @@ class SoftenerManager:
         added = self.model.refill(dt_util.now(), amount)
         if added < amount - 1e-6:
             _LOGGER.warning(
-                "Nachgefüllt: %.2f kg, im Behälter ist aber nur Platz für %.2f kg; der Bestand wurde auf die Behältergröße begrenzt",
+                "Refilled %.2f kg, but the tank only had room for %.2f kg; the stock was limited to the tank capacity",
                 amount,
                 added,
             )
@@ -376,45 +343,51 @@ class SoftenerManager:
         self._save_later()
 
     # ------------------------------------------------------------------ Benachrichtigung
+    def _notify(self, nid: str, issue: str, **placeholders: Any) -> None:
+        """Meldung mit den Texten „issues.<issue>“ aus translations/*.json anlegen oder aktualisieren."""
+        prefix = f"component.{DOMAIN}.issues.{issue}"
+        persistent_notification.async_create(
+            self.hass,
+            self._issue_texts.get(f"{prefix}.description", issue).format(**placeholders),
+            title=self._issue_texts.get(f"{prefix}.title", issue).format(**placeholders),
+            notification_id=nid,
+        )
+
+    def _format_local(self, when: datetime | None, with_time: bool) -> str:
+        """Datum (und Uhrzeit) in Ortszeit: deutsch TT.MM.JJJJ, sonst JJJJ-MM-TT."""
+        if when is None:
+            return "–"
+        pattern = "%d.%m.%Y" if is_german(self.hass.config.language) else "%Y-%m-%d"
+        return dt_util.as_local(when).strftime(f"{pattern} %H:%M" if with_time else pattern)
+
     def _update_notification(self) -> None:
-        lang = "de" if str(self.hass.config.language).lower().startswith("de") else "en"
-        texts = MESSAGES[lang]
-        self._update_overdue_notification(texts)
+        self._update_overdue_notification()
         nid = notification_id(self.entry.entry_id)
         if not self.model.needs_refill:
             persistent_notification.async_dismiss(self.hass, nid)
             return
         left = self.model.remaining_regens
-        persistent_notification.async_create(
-            self.hass,
-            texts["message"].format(
-                name=self.entry.title,
-                left=left,
-                unit=texts["one"] if left == 1 else texts["many"],
-                stock=f"{self.model.state.stock_kg:.1f}",
-                capacity=f"{self.settings.capacity_kg:.1f}",
-            ),
-            title=texts["title"],
-            notification_id=nid,
+        self._notify(
+            nid,
+            "low_salt_one" if left == 1 else "low_salt",
+            name=self.entry.title,
+            left=left,
+            stock=f"{self.model.state.stock_kg:.1f}",
+            capacity=f"{self.settings.capacity_kg:.1f}",
         )
 
-    def _update_overdue_notification(self, texts: dict[str, Any]) -> None:
+    def _update_overdue_notification(self) -> None:
         nid = overdue_notification_id(self.entry.entry_id)
         now = dt_util.now()
         if not self.model.regen_overdue(now):
             persistent_notification.async_dismiss(self.hass, nid)
             return
-        last = self.model.state.last_regen_at
-        due = self.model.next_regen_due(now.tzinfo)
-        persistent_notification.async_create(
-            self.hass,
-            texts["overdue_message"].format(
-                name=self.entry.title,
-                last=dt_util.as_local(last).strftime("%d.%m.%Y %H:%M") if last else "–",
-                due=due.strftime("%d.%m.%Y") if due else "–",
-            ),
-            title=texts["overdue_title"],
-            notification_id=nid,
+        self._notify(
+            nid,
+            "regeneration_overdue",
+            name=self.entry.title,
+            last=self._format_local(self.model.state.last_regen_at, with_time=True),
+            due=self._format_local(self.model.next_regen_due(now.tzinfo), with_time=False),
         )
 
     # ------------------------------------------------------------------ Daten für die Entitäten

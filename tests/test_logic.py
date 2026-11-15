@@ -23,6 +23,8 @@ def at(day, hh, mm=0, ss=0):
 
 
 def model(**kw):
+    # Bestehende Tests beschreiben die von Hand umgestellte Uhr; die anderen Modi prüft ClockModes
+    kw.setdefault("clock_mode", "manual")
     s = Settings(capacity_kg=kw.pop("capacity_kg", 25.0), per_regen_kg=kw.pop("per_regen_kg", 4.0), **kw)
     return SoftenerModel(s)
 
@@ -467,7 +469,7 @@ class StoredStateCompatibility(unittest.TestCase):
         self.assertEqual((m.state.stock_kg, m.state.total_regens, m.state.history), (10.0, 2, []))
 
     def test_strings_and_garbage(self):
-        s = Settings(capacity_kg=25, per_regen_kg=4)
+        s = Settings(capacity_kg=25, per_regen_kg=4, clock_mode="manual")
         m = SoftenerModel.from_dict(s, {
             "stock_kg": "12.5", "total_regens": "3", "regens_since_refill": None, "last_value_l": "1000",
             "window_usage_l": "7", "window_date": "kaputt", "last_regen_at": "2026-10-01T02:30:00+02:00",
@@ -481,6 +483,160 @@ class StoredStateCompatibility(unittest.TestCase):
         self.assertEqual(len(m.state.history), 1)
         m.on_meter(1010, at(6, 2, 10))  # darf nicht mit TypeError abbrechen
         self.assertEqual(m.state.window_usage_l, 10.0)
+
+
+class ClockModes(unittest.TestCase):
+    """Einstellung „Uhr der Anlage“: bleibt auf Winterzeit (Standard), bleibt auf Sommerzeit oder wird von Hand umgestellt."""
+
+    def test_default_is_standard_time(self):
+        self.assertEqual(Settings(capacity_kg=25, per_regen_kg=4).clock_mode, "standard")
+
+    def test_standard_winter_matches_local_time(self):
+        m = model(clock_mode="standard")
+        self.assertEqual(m.window_start(date(2026, 11, 16), TZ), berlin(2026, 11, 16, 2))
+        self.assertEqual(m.window_end(date(2026, 11, 16), TZ), berlin(2026, 11, 16, 3, 1))
+
+    def test_standard_summer_is_one_hour_later_in_local_time(self):
+        m = model(clock_mode="standard", capacity_kg=100)
+        day = date(2026, 7, 6)
+        self.assertEqual(m.window_start(day, TZ), berlin(2026, 7, 6, 3))
+        self.assertEqual(m.window_end(day, TZ), berlin(2026, 7, 6, 4, 1))
+        ev = feed(m, [(berlin(2026, 7, 6, 1), 1000), (berlin(2026, 7, 6, 2, 30), 1060),  # 02:30 MESZ: vor dem Fenster
+                      (berlin(2026, 7, 6, 3, 30), 1112), (berlin(2026, 7, 6, 4, 2), 1113)])
+        self.assertEqual([e["type"] for e in ev], ["window_closed", "regeneration"])
+        self.assertEqual(ev[0]["usage_l"], 52.0)
+        self.assertEqual(m.next_evaluation(berlin(2026, 7, 6, 12)), berlin(2026, 7, 7, 4, 1))
+
+    def test_standard_changeover_nights_are_no_special_case(self):
+        m = model(clock_mode="standard")
+        # März: 02:00 MEZ = 03:00 MESZ (01:00 UTC); Oktober: 02:00 MEZ ist die zweite 02-Uhr-Stunde (01:00 UTC)
+        self.assertEqual(m.window_start(date(2027, 3, 28), TZ).astimezone(UTC), datetime(2027, 3, 28, 1, tzinfo=UTC))
+        self.assertEqual(m.window_start(date(2026, 10, 25), TZ).astimezone(UTC), datetime(2026, 10, 25, 1, tzinfo=UTC))
+        self.assertEqual(m.window_day(berlin(2026, 10, 25, 2, 30)), None)  # erste 02:30 (MESZ)
+        self.assertEqual(m.window_day(berlin(2026, 10, 25, 2, 30, fold=1)), date(2026, 10, 25))
+        # jede Nacht genau ein Fenster, immer 24 Stunden Abstand
+        starts = [m.window_start(date(2026, 10, d), TZ).astimezone(UTC) for d in (24, 25, 26)]
+        self.assertEqual({b - a for a, b in zip(starts, starts[1:])}, {timedelta(hours=24)})
+
+    def test_dst_clock_in_winter_is_one_hour_earlier(self):
+        m = model(clock_mode="dst")
+        self.assertEqual(m.window_start(date(2026, 7, 6), TZ), berlin(2026, 7, 6, 2))
+        self.assertEqual(m.window_start(date(2026, 11, 16), TZ), berlin(2026, 11, 16, 1))
+        self.assertEqual(m.window_day(berlin(2026, 11, 16, 1, 30)), date(2026, 11, 16))
+
+    def test_dst_clock_window_before_local_midnight(self):
+        # Anlage 00–01 Uhr Sommerzeit = 23–00 Uhr MEZ des Vortags: der Fenstertag ist das Datum der Anlagenuhr
+        m = model(clock_mode="dst", start_hour=0, end_hour=1, capacity_kg=100)
+        ev = feed(m, [(berlin(2026, 11, 15, 22), 1000), (berlin(2026, 11, 15, 23, 30), 1052),
+                      (berlin(2026, 11, 16, 0, 2), 1053)])
+        self.assertEqual([e["type"] for e in ev], ["window_closed", "regeneration"])
+        self.assertEqual(ev[0]["date"], date(2026, 11, 16))
+        self.assertEqual(m.next_evaluation(berlin(2026, 11, 15, 22)), berlin(2026, 11, 16, 0, 1))
+
+    def test_zone_without_dst_ignores_mode(self):
+        tz = ZoneInfo("Asia/Tokyo")
+        starts = {model(clock_mode=mode).window_start(date(2026, 7, 6), tz) for mode in logic.CLOCK_MODES}
+        self.assertEqual(starts, {datetime(2026, 7, 6, 2, tzinfo=tz)})
+
+    def test_southern_hemisphere(self):
+        tz = ZoneInfo("Australia/Sydney")  # Sommerzeit im Januar (UTC+11), Normalzeit im Juli (UTC+10)
+        m = model(clock_mode="standard")
+        self.assertEqual(m.window_start(date(2026, 1, 10), tz), datetime(2026, 1, 10, 3, tzinfo=tz))
+        self.assertEqual(m.window_start(date(2026, 7, 10), tz), datetime(2026, 7, 10, 2, tzinfo=tz))
+        m = model(clock_mode="dst")
+        self.assertEqual(m.window_start(date(2026, 7, 10), tz), datetime(2026, 7, 10, 1, tzinfo=tz))
+
+    def test_due_date_in_standard_mode(self):
+        m = model(clock_mode="standard", capacity_kg=100)
+        m.add_manual_regeneration(berlin(2026, 7, 1, 3, 30))
+        self.assertEqual(m.next_regen_due(TZ), berlin(2026, 7, 8, 3))
+        self.assertFalse(m.regen_overdue(berlin(2026, 7, 8, 4, 0, 59)))
+        self.assertTrue(m.regen_overdue(berlin(2026, 7, 8, 4, 1)))
+
+
+class GapsInsideWindow(unittest.TestCase):
+    """Zählerausfall oder Neustart: der Zuwachs zählt nur, wenn der letzte Wert im selben Fenster lag."""
+
+    def test_gap_inside_window_is_counted(self):
+        m = model(capacity_kg=100)
+        feed(m, [(at(6, 1, 50), 1000), (at(6, 2, 5), 1010)])
+        m.on_meter(1052, at(6, 2, 40), baseline_only=True, bridge_gap=True)  # Zähler war 02:05–02:40 nicht verfügbar
+        self.assertEqual(m.state.window_usage_l, 52.0)
+        m.evaluate_pending(at(6, 3, 1), scheduled=True)
+        self.assertEqual(m.state.total_regens, 1)
+
+    def test_gap_starting_before_window_is_not_counted(self):
+        m = model(capacity_kg=100)
+        feed(m, [(at(6, 1, 50), 1000)])
+        m.on_meter(1300, at(6, 2, 40), baseline_only=True, bridge_gap=True)
+        self.assertEqual(m.state.window_usage_l, 0.0)
+
+    def test_gap_is_not_counted_without_bridge(self):
+        m = model(capacity_kg=100)
+        feed(m, [(at(6, 1, 50), 1000), (at(6, 2, 5), 1010)])
+        m.on_meter(1052, at(6, 2, 40), baseline_only=True)  # z. B. Einheit gewechselt
+        self.assertEqual(m.state.window_usage_l, 10.0)
+
+    def test_restart_inside_window(self):
+        m = model(capacity_kg=100)
+        feed(m, [(at(6, 1, 50), 1000), (at(6, 2, 5), 1010)])
+        m2 = SoftenerModel.from_dict(m.settings, m.to_dict())
+        m2.on_meter(1052, at(6, 2, 40), baseline_only=True, bridge_gap=True)
+        self.assertEqual(m2.state.window_usage_l, 52.0)
+
+    def test_old_store_without_timestamp_is_not_bridged(self):
+        m = model(capacity_kg=100)
+        feed(m, [(at(6, 1, 50), 1000), (at(6, 2, 5), 1010)])
+        data = m.to_dict()
+        del data["last_value_at"]
+        m2 = SoftenerModel.from_dict(m.settings, data)
+        m2.on_meter(1052, at(6, 2, 40), baseline_only=True, bridge_gap=True)
+        self.assertEqual(m2.state.window_usage_l, 10.0)
+
+    def test_naive_stored_timestamps_are_dropped(self):
+        m = SoftenerModel.from_dict(Settings(capacity_kg=25, per_regen_kg=4), {
+            "last_value_at": "2026-10-06T02:05:00", "history": ["2026-10-01T02:30:00"],
+        })
+        self.assertIsNone(m.state.last_value_at)
+        self.assertEqual(m.state.history, [])
+
+
+class WindowMovedOnSameDay(unittest.TestCase):
+    def test_changed_window_is_evaluated_again(self):
+        m = model(capacity_kg=100)
+        feed(m, [(at(6, 1), 1000), (at(6, 2, 30), 1010)])
+        m.evaluate_pending(at(6, 3, 1), scheduled=True)
+        m.settings.start_hour, m.settings.end_hour = 4, 5  # Fenster am selben Tag auf 4–5 Uhr verlegt
+        m.on_meter(1070, at(6, 4, 30))
+        self.assertEqual(m.state.window_usage_l, 60.0)  # nicht mit den 10 L des alten Fensters vermischt
+        ev = m.evaluate_pending(at(6, 5, 1), scheduled=True)
+        self.assertEqual([e["type"] for e in ev], ["window_closed", "regeneration"])
+        self.assertEqual(m.state.total_regens, 1)
+
+    def test_open_window_keeps_its_end_after_settings_change(self):
+        m = model(capacity_kg=100)
+        feed(m, [(at(6, 1), 1000), (at(6, 2, 30), 1052)])
+        m.settings.clock_mode = "standard"  # im Oktober (MESZ) läge das Fenster jetzt 03–04 Uhr
+        ev = m.evaluate_pending(at(6, 3, 1), scheduled=True)
+        self.assertEqual([e["type"] for e in ev], ["window_closed", "regeneration"])
+
+
+class LastRegenerationHistory(unittest.TestCase):
+    def test_correcting_forward_replaces_latest_entry(self):
+        m = model(capacity_kg=100)
+        m.add_manual_regeneration(at(1, 2, 30))
+        m.add_manual_regeneration(at(4, 2, 30))
+        m.set_last_regeneration(at(5, 2, 30), at(6, 12))
+        self.assertEqual(m.state.history, [at(5, 2, 30), at(1, 2, 30)])
+        self.assertEqual(m.state.total_regens, 2)
+
+    def test_correcting_backward_drops_newer_entries(self):
+        m = model(capacity_kg=100)
+        for day in (1, 3, 5):
+            m.add_manual_regeneration(at(day, 2, 30))
+        m.set_last_regeneration(at(2, 2, 30), at(6, 12))
+        self.assertEqual(m.state.history, [at(2, 2, 30), at(1, 2, 30)])
+        self.assertEqual(m.state.last_regen_at, m.state.history[0])
 
 
 if __name__ == "__main__":

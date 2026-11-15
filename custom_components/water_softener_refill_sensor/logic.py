@@ -10,16 +10,18 @@ Funktionsweise
 * Eine Minute nach Ende des Fensters wird ausgewertet: Ist der Verbrauch im Fenster größer als der Schwellwert
   (Standard 45 Liter), zählt das als eine Regeneration. Erfasst wird bewusst bis zu diesem Auswertezeitpunkt, also
   einschließlich der Minute nach dem Fensterende, damit verspätet gemeldete Zählerwerte noch zählen.
-* Zeitfenster in echter Zeit: Der Beginn ist die eingestellte Stunde in Ortszeit, die Länge (Ende − Beginn) wird in
-  echten Stunden gerechnet, alle Vergleiche laufen in UTC.
-  Tatsache (vom Nutzer bestätigt): Die Anlage stellt ihre Uhr **nicht** selbst um. Der Nutzer stellt sie von Hand um,
-  in der Praxis nach der Umstellungsnacht; in dieser Nacht regeneriert die Anlage also noch nach ihrer alten Uhr.
-  Genau das trifft die Regel (Europe/Berlin, Fenster 2–3 Uhr):
-  - Oktober: Fenster 02:00 MESZ bis 02:00 MEZ (die erste der beiden Stunden) = 02:00 bis 03:00 der Anlage, die noch
-    auf Sommerzeit steht; keine Doppelerfassung.
-  - März: 02:00 gibt es nicht, der Beginn rückt auf 03:00 MESZ vor, Fenster 03:00 bis 04:00 MESZ = 02:00 bis 03:00 MEZ
-    der Anlage, die noch auf Winterzeit steht.
-  Wird die Anlagenuhr schon vor der Umstellungsnacht umgestellt, liegt ihre Regeneration in dieser Nacht neben dem Fenster.
+* Zeitfenster in Anlagenzeit: Die Anlage stellt ihre Uhr **nicht** selbst um. Die Einstellung „Uhr der Anlage“
+  (``Settings.clock_mode``) legt fest, nach welcher Uhr das Fenster gilt; alle Vergleiche laufen in UTC, die Länge
+  (Ende − Beginn) wird in echten Stunden gerechnet. Beispiele für Europe/Berlin, Fenster 2–3 Uhr:
+  - ``standard`` (Standard): Die Uhr bleibt ganzjährig auf Winterzeit. Fenster im Winter 02:00–03:00 MEZ, im Sommer
+    03:00–04:00 MESZ; die Umstellungsnächte sind kein Sonderfall.
+  - ``dst``: Die Uhr bleibt ganzjährig auf Sommerzeit. Fenster im Sommer 02:00–03:00 MESZ, im Winter 01:00–02:00 MEZ.
+  - ``manual``: Der Nutzer stellt die Uhr von Hand um, in der Praxis nach der Umstellungsnacht; in dieser Nacht
+    regeneriert die Anlage noch nach ihrer alten Uhr. Beginn = eingestellte Stunde in Ortszeit:
+    Oktober 02:00 MESZ bis 02:00 MEZ (die erste der beiden Stunden), März 03:00 bis 04:00 MESZ (02:00 gibt es nicht).
+  Der „Tag“ eines Fensters ist das Datum der Anlagenuhr zum Fensterbeginn.
+* Lücken: Fällt der Zähler kurz aus oder startet Home Assistant neu, zählt der Zuwachs seit dem letzten Wert nur dann,
+  wenn dieser letzte Wert im selben Fenster lag (``bridge_gap``); sonst wird nur ein neuer Bezugswert gesetzt.
 * Jede Regeneration verbraucht eine einstellbare Menge Salz. Der Salzbestand ist rein rechnerisch. Beim Nachfüllen
   muss die nachgefüllte Menge (kg) angegeben werden; sie wird zum Bestand addiert (höchstens bis voll).
 """
@@ -36,6 +38,12 @@ EVAL_DELAY = timedelta(minutes=1)
 HYGIENE_DAYS = 7
 HISTORY_LENGTH = 10
 
+# Uhr der Anlage (sie stellt sich nicht selbst um)
+CLOCK_STANDARD = "standard"  # bleibt ganzjährig auf Winterzeit (Normalzeit)
+CLOCK_DST = "dst"  # bleibt ganzjährig auf Sommerzeit
+CLOCK_MANUAL = "manual"  # wird nach der Umstellungsnacht von Hand umgestellt (folgt der Ortszeit)
+CLOCK_MODES = (CLOCK_STANDARD, CLOCK_DST, CLOCK_MANUAL)
+
 
 @dataclass
 class Settings:
@@ -47,6 +55,7 @@ class Settings:
     start_hour: int = 2
     end_hour: int = 3
     warn_remaining: int = 3
+    clock_mode: str = CLOCK_STANDARD
 
 
 @dataclass
@@ -57,7 +66,9 @@ class State:
     total_regens: int = 0
     regens_since_refill: int = 0
     last_value_l: float | None = None
+    last_value_at: datetime | None = None
     window_date: date | None = None
+    window_start_at: datetime | None = None
     window_usage_l: float = 0.0
     window_crossed_at: datetime | None = None
     evaluated_date: date | None = None
@@ -76,10 +87,12 @@ def _utc(value: datetime) -> datetime:
 
 
 def _dt(value: Any) -> datetime | None:
+    """Gespeicherter Zeitpunkt; unlesbare Werte und solche ohne Zeitzone werden verworfen."""
     try:
-        return datetime.fromisoformat(value) if value else None
+        parsed = datetime.fromisoformat(value) if value else None
     except (TypeError, ValueError):
         return None
+    return parsed if parsed is not None and parsed.tzinfo is not None else None
 
 
 def _d(value: Any) -> date | None:
@@ -127,13 +140,30 @@ class SoftenerModel:
     def _clamp(self, kg: float) -> float:
         return max(0.0, min(finite_float(kg), float(self.settings.capacity_kg)))
 
-    def window_start(self, day: date, tz: Any) -> datetime:
-        """Beginn des Fensters am Tag day (Ortszeit tz).
+    def clock_tz(self, tz: Any, day: date) -> Any:
+        """Zeitzone der Anlagenuhr am Tag day: Ortszeit tz (manual) oder fester Versatz (Winter- bzw. Sommerzeit)."""
+        if self.settings.clock_mode == CLOCK_MANUAL:
+            return tz
+        noon = datetime.combine(day, time(12, 0), tzinfo=tz)
+        standard = noon.utcoffset() - (noon.dst() or timedelta(0))
+        if self.settings.clock_mode == CLOCK_DST:
+            # Betrag der Sommerzeitverschiebung dieser Zeitzone (0 in Zeitzonen ohne Sommerzeit)
+            standard += max(
+                (datetime(day.year, month, 1, 12, tzinfo=tz).dst() or timedelta(0)) for month in (1, 7)
+            )
+        return timezone(standard)
 
-        Doppelte Ortszeit (Oktober): die erste (fold=0). Nicht existierende Ortszeit (März): fold=0 rechnet mit dem
-        Versatz vor der Umstellung, der Beginn rückt damit um die Lücke nach vorn (02:00 → 03:00 MESZ).
+    def clock_date(self, when: datetime) -> date:
+        """Datum der Anlagenuhr zum Zeitpunkt when (when in Ortszeit)."""
+        return when.astimezone(self.clock_tz(when.tzinfo, when.date())).date()
+
+    def window_start(self, day: date, tz: Any) -> datetime:
+        """Beginn des Fensters am Tag day der Anlagenuhr, zurückgegeben in Ortszeit tz.
+
+        Nur manual: doppelte Ortszeit (Oktober): die erste (fold=0). Nicht existierende Ortszeit (März): fold=0 rechnet
+        mit dem Versatz vor der Umstellung, der Beginn rückt damit um die Lücke nach vorn (02:00 → 03:00 MESZ).
         """
-        local = datetime.combine(day, time(self.settings.start_hour, 0), tzinfo=tz)
+        local = datetime.combine(day, time(self.settings.start_hour, 0), tzinfo=self.clock_tz(tz, day))
         return _utc(local).astimezone(tz)
 
     def window_end(self, day: date, tz: Any) -> datetime:
@@ -143,7 +173,7 @@ class SoftenerModel:
 
     def window_day(self, now: datetime) -> date | None:
         """Tag des Fensters, in dem now liegt (Erfassung einschließlich Nachlauf), sonst None."""
-        today = now.date()
+        today = self.clock_date(now)
         for day in (today, today - timedelta(days=1)):
             if _utc(self.window_start(day, now.tzinfo)) <= _utc(now) < _utc(self.window_end(day, now.tzinfo)):
                 return day
@@ -151,16 +181,16 @@ class SoftenerModel:
 
     def last_closed_day(self, now: datetime) -> date:
         """Tag des zuletzt beendeten Fensters (heute, wenn dessen Auswertezeitpunkt erreicht ist, sonst gestern)."""
-        today = now.date()
+        today = self.clock_date(now)
         if _utc(now) >= _utc(self.window_end(today, now.tzinfo)):
             return today
         return today - timedelta(days=1)
 
     def next_evaluation(self, now: datetime) -> datetime:
         """Nächster Auswertezeitpunkt nach now (für den Zeitplan im Manager)."""
-        today = now.date()
-        for day in (today, today + timedelta(days=1), today + timedelta(days=2)):
-            end = self.window_end(day, now.tzinfo)
+        today = self.clock_date(now)
+        for offset in (-1, 0, 1, 2):
+            end = self.window_end(today + timedelta(days=offset), now.tzinfo)
             if _utc(end) > _utc(now):
                 return end
         raise RuntimeError("kein Auswertezeitpunkt gefunden")  # pragma: no cover
@@ -184,54 +214,80 @@ class SoftenerModel:
         return self.remaining_regens <= self.settings.warn_remaining
 
     # ------------------------------------------------------------------ 7-Tage-Regel (Hygieneregeneration)
-    def next_regen_due(self, tz: Any) -> datetime | None:
-        """Spätestens fälliger Zeitpunkt der nächsten Regeneration: Beginn des Zeitfensters 7 Tage nach der letzten."""
+    def _due_day(self, tz: Any) -> date | None:
         last = self.state.last_regen_at
         if last is None:
             return None
-        due_day = last.astimezone(tz).date() + timedelta(days=HYGIENE_DAYS)
-        return self.window_start(due_day, tz)
+        return self.clock_date(last.astimezone(tz)) + timedelta(days=HYGIENE_DAYS)
+
+    def next_regen_due(self, tz: Any) -> datetime | None:
+        """Spätestens fälliger Zeitpunkt der nächsten Regeneration: Beginn des Zeitfensters 7 Tage nach der letzten."""
+        due_day = self._due_day(tz)
+        return None if due_day is None else self.window_start(due_day, tz)
 
     def regen_overdue(self, now: datetime) -> bool:
         """Wahr, wenn das Zeitfenster am Fälligkeitstag ausgewertet wurde und keine Regeneration erkannt wurde.
 
         Hinweis auf einen verpassten Zählerwert (Wasserzähler ausgefallen) oder auf eine Störung der Anlage.
         """
-        due = self.next_regen_due(now.tzinfo)
-        if due is None:
+        due_day = self._due_day(now.tzinfo)
+        if due_day is None:
             return False
-        return _utc(now) >= _utc(self.window_end(due.date(), now.tzinfo))
+        return _utc(now) >= _utc(self.window_end(due_day, now.tzinfo))
 
     # ------------------------------------------------------------------ Zählerstand verarbeiten
-    def on_meter(self, value_l: float, now: datetime, baseline_only: bool = False) -> list[dict[str, Any]]:
+    def on_meter(
+        self, value_l: float, now: datetime, baseline_only: bool = False, bridge_gap: bool = False
+    ) -> list[dict[str, Any]]:
         """Neuen Zählerstand (in Litern) verarbeiten.
 
         baseline_only=True setzt nur den Bezugswert (z. B. nach einem Neustart oder wenn der Zähler zuvor
         nicht verfügbar war), ohne einen Zuwachs zu zählen. So werden Lücken in den Daten nicht fälschlich
         als Verbrauch im Zeitfenster gewertet.
+
+        bridge_gap=True (nur zusammen mit baseline_only): Lag der letzte bekannte Wert im selben Fenster wie now,
+        fällt die ganze Lücke ins Fenster; der Zuwachs zählt dann doch (kurzer Zählerausfall, Neustart im Fenster).
         """
         events = self.evaluate_pending(now)
         st = self.state
         if not math.isfinite(value_l) or value_l < 0:
             # A new baseline after invalid data avoids attributing the gap to a window.
             st.last_value_l = None
+            st.last_value_at = None
             return events
-        prev = st.last_value_l
+        prev, prev_at = st.last_value_l, st.last_value_at
         st.last_value_l = value_l
-        if baseline_only or prev is None:
+        st.last_value_at = now
+        if prev is None:
             return events
+        day = self.window_day(now)
+        if baseline_only:
+            in_same_window = (
+                bridge_gap
+                and day is not None
+                and prev_at is not None
+                and _utc(prev_at) >= _utc(self.window_start(day, now.tzinfo))
+            )
+            if not in_same_window:
+                return events
         delta = value_l - prev
         if delta <= 0:  # unverändert, oder Zähler zurückgesetzt/getauscht (negativ): nichts zählen
             return events
-        day = self.window_day(now)
         if day is not None:
-            if st.window_date != day:  # neues Fenster beginnt
+            start = self.window_start(day, now.tzinfo)
+            # Neues Fenster: anderer Tag oder (nach geänderten Einstellungen) anderer Beginn am selben Tag
+            moved = st.window_start_at is not None and _utc(st.window_start_at) != _utc(start)
+            if st.window_date != day or moved:
+                if st.evaluated_date == day:  # verschobenes Fenster am selben Tag wird noch einmal ausgewertet
+                    st.evaluated_date = None
                 st.window_date = day
                 st.window_usage_l = 0.0
                 st.window_crossed_at = None
+            st.window_start_at = start
             usage = st.window_usage_l + delta
             if not math.isfinite(usage):
                 st.last_value_l = None
+                st.last_value_at = None
                 return events
             st.window_usage_l = usage
             if st.window_crossed_at is None and st.window_usage_l > self.settings.threshold_l:
@@ -248,17 +304,26 @@ class SoftenerModel:
         st = self.state
         wd = st.window_date
         if wd is not None and st.evaluated_date != wd:
-            if _utc(now) >= _utc(self.window_end(wd, now.tzinfo)):
+            if _utc(now) >= _utc(self._open_window_end(wd, now.tzinfo)):
                 return self._finalize(wd, now.tzinfo)
             return []
         day = self.last_closed_day(now)
         if scheduled and (st.evaluated_date is None or st.evaluated_date < day):
             st.window_date = day
+            st.window_start_at = self.window_start(day, now.tzinfo)
             st.window_usage_l = 0.0
             st.window_crossed_at = None
             st.evaluated_date = day
             return [{"type": "window_closed", "date": day, "usage_l": 0.0}]
         return []
+
+    def _open_window_end(self, day: date, tz: Any) -> datetime:
+        """Auswertezeitpunkt des offenen Fensters: aus seinem gespeicherten Beginn (auch nach geänderten Einstellungen)."""
+        start = self.state.window_start_at
+        if start is None:  # ältere Speicherstände
+            return self.window_end(day, tz)
+        hours = self.settings.end_hour - self.settings.start_hour
+        return (_utc(start) + timedelta(hours=hours) + EVAL_DELAY).astimezone(tz)
 
     def _finalize(self, day: date, tz: Any) -> list[dict[str, Any]]:
         st = self.state
@@ -266,7 +331,7 @@ class SoftenerModel:
         usage = st.window_usage_l
         events: list[dict[str, Any]] = [{"type": "window_closed", "date": day, "usage_l": usage}]
         if usage > self.settings.threshold_l:
-            at = st.window_crossed_at or self.window_end(day, tz)
+            at = st.window_crossed_at or self._open_window_end(day, tz)
             self._register(at)
             events.append({"type": "regeneration", "date": day, "at": at, "usage_l": usage, "manual": False})
         return events
@@ -323,7 +388,14 @@ class SoftenerModel:
         """Zeitpunkt der letzten Regeneration von Hand setzen (bestimmt die 7-Tage-Regel). Nicht in der Zukunft."""
         if at > now:
             raise ValueError("Die letzte Regeneration darf nicht in der Zukunft liegen.")
-        self.state.last_regen_at = at
+        st = self.state
+        st.last_regen_at = at
+        # Verlauf angleichen: neuere Einträge entfallen; war keiner neuer, wird der jüngste Eintrag korrigiert
+        history = sorted(st.history or [], key=_utc, reverse=True)
+        older = [h for h in history if _utc(h) <= _utc(at)]
+        if len(older) == len(history):
+            older = older[1:]
+        st.history = ([at] + older)[:HISTORY_LENGTH]
 
     def set_regens_since_refill(self, count: int) -> None:
         """Bekannte Regenerationen seit dem letzten Füllen bis voll setzen.
@@ -350,7 +422,9 @@ class SoftenerModel:
             "total_regens": s.total_regens,
             "regens_since_refill": s.regens_since_refill,
             "last_value_l": s.last_value_l,
+            "last_value_at": s.last_value_at.isoformat() if s.last_value_at else None,
             "window_date": s.window_date.isoformat() if s.window_date else None,
+            "window_start_at": s.window_start_at.isoformat() if s.window_start_at else None,
             "window_usage_l": s.window_usage_l,
             "window_crossed_at": s.window_crossed_at.isoformat() if s.window_crossed_at else None,
             "evaluated_date": s.evaluated_date.isoformat() if s.evaluated_date else None,
@@ -367,7 +441,9 @@ class SoftenerModel:
             total_regens=_int(data.get("total_regens"), 0),
             regens_since_refill=_int(data.get("regens_since_refill"), 0),
             last_value_l=_float(data.get("last_value_l"), None),
+            last_value_at=_dt(data.get("last_value_at")),
             window_date=_d(data.get("window_date")),
+            window_start_at=_dt(data.get("window_start_at")),
             window_usage_l=_float(data.get("window_usage_l"), 0.0),
             window_crossed_at=_dt(data.get("window_crossed_at")),
             evaluated_date=_d(data.get("evaluated_date")),

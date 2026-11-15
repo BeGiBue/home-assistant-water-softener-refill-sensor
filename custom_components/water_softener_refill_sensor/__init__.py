@@ -27,8 +27,8 @@ from .const import (
     all_notification_ids,
     storage_key,
 )
-from .manager import SoftenerManager, service_error
 from .logic import finite_float
+from .manager import SoftenerManager, service_error
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -77,14 +77,14 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     async def _add_regeneration(call: ServiceCall) -> None:
         await _manager_for(hass, call).async_add_regeneration(call.data[ATTR_COUNT], call.data.get(ATTR_DATETIME))
 
-    hass.services.async_register(DOMAIN, SERVICE_REFILL, _refill, schema=SCHEMA_REFILL)
-    hass.services.async_register(DOMAIN, SERVICE_SET_STOCK, _set_stock, schema=SCHEMA_SET_STOCK)
     async def _set_last(call: ServiceCall) -> None:
         await _manager_for(hass, call).async_set_last_regeneration(call.data[ATTR_DATETIME])
 
     async def _set_since(call: ServiceCall) -> None:
         await _manager_for(hass, call).async_set_regens_since_refill(call.data[ATTR_COUNT])
 
+    hass.services.async_register(DOMAIN, SERVICE_REFILL, _refill, schema=SCHEMA_REFILL)
+    hass.services.async_register(DOMAIN, SERVICE_SET_STOCK, _set_stock, schema=SCHEMA_SET_STOCK)
     hass.services.async_register(DOMAIN, SERVICE_ADD_REGENERATION, _add_regeneration, schema=SCHEMA_ADD)
     hass.services.async_register(DOMAIN, SERVICE_SET_LAST_REGENERATION, _set_last, schema=SCHEMA_SET_LAST)
     hass.services.async_register(DOMAIN, SERVICE_SET_REGENS_SINCE_REFILL, _set_since, schema=SCHEMA_SET_SINCE)
@@ -93,7 +93,12 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     manager = SoftenerManager(hass, entry)
-    await manager.async_start()
+    try:
+        await manager.async_start()
+    except BaseException:
+        # Start gescheitert: Listener und Zeitplan abmelden, aber nichts speichern (der Zustand ist evtl. nicht geladen)
+        manager.async_abort()
+        raise
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = manager
     try:
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

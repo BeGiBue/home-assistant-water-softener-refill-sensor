@@ -5,7 +5,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity, DataUpdateCoordinator
 
-from .const import DOMAIN
+from .const import DOMAIN, is_german
 
 
 class EnthaertungEntity(CoordinatorEntity[DataUpdateCoordinator]):
@@ -23,7 +23,7 @@ class EnthaertungEntity(CoordinatorEntity[DataUpdateCoordinator]):
             name=entry.title,
             model=(
                 "Regenerations- und Salzüberwachung"
-                if str(getattr(getattr(getattr(coordinator, "hass", None), "config", None), "language", "")).lower().startswith("de")
+                if is_german(coordinator.hass.config.language)
                 else "Regeneration and salt monitoring"
             ),
             entry_type=DeviceEntryType.SERVICE,

@@ -16,7 +16,7 @@ from homeassistant import config_entries
 from homeassistant.components import persistent_notification as pn
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
-from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.data_entry_flow import FlowResultType, InvalidData
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import entity_registry as er
 from homeassistant.setup import async_setup_component
@@ -42,6 +42,7 @@ DATA = {
     "window_start_hour": 2,
     "window_end_hour": 3,
     "warn_remaining": 3,
+    "clock_mode": "manual",  # die Abläufe hier beschreiben die von Hand umgestellte Uhr; Standard siehe unten
 }
 TOTAL = "sensor.enthartungsanlage_regenerationen_gesamt"
 USAGE = "sensor.enthartungsanlage_verbrauch_im_zeitfenster"
@@ -105,6 +106,7 @@ async def test_config_flow_creates_entry(hass: HomeAssistant, berlin):
     await hass.async_block_till_done()
     assert done["type"] is FlowResultType.CREATE_ENTRY
     assert done["data"]["warn_remaining"] == 3
+    assert done["data"]["clock_mode"] == "manual"
     entry = done["result"]
     ids = {e.entity_id for e in er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id)}
     assert len(ids) == 16
@@ -125,7 +127,67 @@ async def test_options_flow_reload_keeps_state(hass: HomeAssistant, berlin, free
     assert float(state(hass, STOCK)) == 20.0  # auf die neue Behältergröße begrenzt
 
 
+async def test_clock_mode_form(hass: HomeAssistant, berlin):
+    """Auswahl „Uhr der Anlage“: Standard Winterzeit, unbekannte Werte lehnt das Formular ab."""
+    hass.states.async_set(W, "1000", {"unit_of_measurement": "L"})
+    form = {k: v for k, v in DATA.items() if k != "clock_mode"}
+    result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": config_entries.SOURCE_USER})
+    with pytest.raises(InvalidData):
+        await hass.config_entries.flow.async_configure(result["flow_id"], {**form, "clock_mode": "unsinn"})
+    done = await hass.config_entries.flow.async_configure(result["flow_id"], form)
+    await hass.async_block_till_done()
+    assert done["type"] is FlowResultType.CREATE_ENTRY
+    assert done["data"]["clock_mode"] == "standard"
+    entry = done["result"]
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    options = {k: v for k, v in form.items() if k != "name"}
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {**options, "clock_mode": "dst"})
+    await hass.async_block_till_done()
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert hass.data[DOMAIN][entry.entry_id].settings.clock_mode == "dst"
+
+
 # ---------------------------------------------------------------- Nacht und Zeitplan
+async def test_standard_clock_summer_night(hass: HomeAssistant, berlin, freezer):
+    """Bestehende Einrichtung ohne die Option: Uhr bleibt auf Winterzeit, im Sommer Fenster 03:00–04:00 MESZ."""
+    entry = await setup_entry(hass, freezer, "2026-07-06 01:00:00+02:00")
+    hass.config_entries.async_update_entry(entry, data={k: v for k, v in DATA.items() if k != "clock_mode"})
+    await hass.async_block_till_done()
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+    await meter(hass, freezer, "2026-07-06 02:30:00+02:00", "1060")  # vor dem Fenster
+    await tick(hass, freezer, "2026-07-06 03:01:00+02:00")  # keine Auswertung um 03:01
+    await meter(hass, freezer, "2026-07-06 03:30:00+02:00", "1112")
+    assert state(hass, TOTAL) == "0"
+    await tick(hass, freezer, "2026-07-06 04:01:00+02:00")
+    assert state(hass, TOTAL) == "1"
+    assert float(state(hass, USAGE)) == 52.0
+
+
+async def test_standard_clock_changeover_nights(hass: HomeAssistant, berlin, freezer):
+    """Uhr bleibt auf Winterzeit: Oktober zählt die zweite 02-Uhr-Stunde (MEZ), März 03:00–04:00 MESZ."""
+    await setup_entry(hass, freezer, "2026-10-25 01:30:00+02:00", clock_mode="standard")
+    await meter(hass, freezer, "2026-10-25 02:30:00+02:00", "1060")  # erste 02:30 (MESZ): vor dem Fenster
+    await meter(hass, freezer, "2026-10-25 02:30:00+01:00", "1112")  # zweite 02:30 (MEZ): im Fenster
+    await tick(hass, freezer, "2026-10-25 03:01:00+01:00")
+    assert state(hass, TOTAL) == "1"
+    assert float(state(hass, USAGE)) == 52.0
+    await meter(hass, freezer, "2027-03-28 01:59:00+01:00", "2000")
+    await meter(hass, freezer, "2027-03-28 03:30:00+02:00", "2052")
+    await tick(hass, freezer, "2027-03-28 04:01:00+02:00")
+    assert state(hass, TOTAL) == "2"
+
+
+async def test_meter_outage_inside_window_is_counted(hass: HomeAssistant, berlin, freezer):
+    await setup_entry(hass, freezer, "2026-10-06 01:50:00+02:00")
+    await meter(hass, freezer, "2026-10-06 02:05:00+02:00", "1010")
+    await meter(hass, freezer, "2026-10-06 02:10:00+02:00", "unavailable")
+    await meter(hass, freezer, "2026-10-06 02:40:00+02:00", "1052")
+    await tick(hass, freezer, "2026-10-06 03:01:00+02:00")
+    assert state(hass, TOTAL) == "1"
+    assert float(state(hass, USAGE)) == 52.0
+
+
 async def test_normal_night(hass: HomeAssistant, berlin, freezer):
     await setup_entry(hass, freezer, "2026-10-06 01:50:00+02:00")
     for t, v in [("02:10", "1010"), ("02:20", "1030"), ("02:40", "1050"), ("02:55", "1052")]:
@@ -193,9 +255,9 @@ async def test_unknown_or_missing_unit(hass: HomeAssistant, berlin, freezer, cap
     nid = f"{DOMAIN}_{entry.entry_id}_unit"
     assert nid in notifications(hass)
     assert notifications(hass)[nid]["title"] == "Einheit des Wasserzählers unbekannt"
-    assert caplog.text.count("keine bekannte Volumeneinheit") == 1
+    assert caplog.text.count("is not a known volume unit") == 1
     await meter(hass, freezer, "2026-10-06 02:10:00+02:00", "1100", "Eimer")
-    assert caplog.text.count("keine bekannte Volumeneinheit") == 1  # nur einmal
+    assert caplog.text.count("is not a known volume unit") == 1  # nur einmal
     await meter(hass, freezer, "2026-10-06 02:20:00+02:00", "1200", None)  # ohne Einheit
     await meter(hass, freezer, "2026-10-06 02:30:00+02:00", "1300", "L")  # bekannt: nur Bezugswert
     assert nid not in notifications(hass)

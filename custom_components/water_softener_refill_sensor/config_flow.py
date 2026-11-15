@@ -14,11 +14,15 @@ from homeassistant.helpers.selector import (
     NumberSelector,
     NumberSelectorConfig,
     NumberSelectorMode,
+    SelectSelector,
+    SelectSelectorConfig,
+    SelectSelectorMode,
     TextSelector,
 )
 
 from .const import (
     CONF_CAPACITY_KG,
+    CONF_CLOCK_MODE,
     CONF_INITIAL_STOCK_KG,
     CONF_PER_REGEN_KG,
     CONF_THRESHOLD_L,
@@ -27,6 +31,7 @@ from .const import (
     CONF_WINDOW_END,
     CONF_WINDOW_START,
     DEFAULT_CAPACITY_KG,
+    DEFAULT_CLOCK_MODE,
     DEFAULT_NAME,
     DEFAULT_PER_REGEN_KG,
     DEFAULT_THRESHOLD_L,
@@ -36,7 +41,7 @@ from .const import (
     DOMAIN,
     default_name,
 )
-from .logic import finite_float
+from .logic import CLOCK_MODES, finite_float
 
 
 def _number(minimum: float, maximum: float, step: float, unit: str | None = None) -> NumberSelector:
@@ -71,6 +76,10 @@ def _schema(first_setup: bool, defaults: dict[str, Any]) -> vol.Schema:
     fields[vol.Required(CONF_WINDOW_END, default=defaults.get(CONF_WINDOW_END, DEFAULT_WINDOW_END))] = _number(
         1, 23, 1, "h"
     )
+    # Die Anlage stellt ihre Uhr nicht selbst um: Das Zeitfenster gilt nach der hier gewählten Anlagenuhr
+    fields[vol.Required(CONF_CLOCK_MODE, default=defaults.get(CONF_CLOCK_MODE, DEFAULT_CLOCK_MODE))] = SelectSelector(
+        SelectSelectorConfig(options=list(CLOCK_MODES), translation_key="clock_mode", mode=SelectSelectorMode.LIST)
+    )
     fields[vol.Required(CONF_WARN_REMAINING, default=defaults.get(CONF_WARN_REMAINING, DEFAULT_WARN_REMAINING))] = (
         _number(0, 100, 1)
     )
@@ -91,7 +100,9 @@ def _normalize(user_input: dict[str, Any]) -> dict[str, Any]:
 
 def _validate(data: dict[str, Any]) -> dict[str, str]:
     errors: dict[str, str] = {}
-    if data[CONF_WINDOW_START] >= data[CONF_WINDOW_END]:
+    if data.get(CONF_CLOCK_MODE, DEFAULT_CLOCK_MODE) not in CLOCK_MODES:
+        errors["base"] = "clock_mode_invalid"
+    elif data[CONF_WINDOW_START] >= data[CONF_WINDOW_END]:
         errors["base"] = "window_invalid"
     elif data[CONF_PER_REGEN_KG] > data[CONF_CAPACITY_KG]:
         errors["base"] = "per_regen_too_large"
@@ -128,7 +139,7 @@ class EnthaertungConfigFlow(ConfigFlow, domain=DOMAIN):
 
 
 class EnthaertungOptionsFlow(OptionsFlow):
-    """Einstellungen nachträglich ändern (Behältergröße, Salzverbrauch, Zeitfenster, Schwellwert, Warnung)."""
+    """Einstellungen nachträglich ändern (Behältergröße, Salzverbrauch, Zeitfenster, Anlagenuhr, Schwellwert, Warnung)."""
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         errors: dict[str, str] = {}

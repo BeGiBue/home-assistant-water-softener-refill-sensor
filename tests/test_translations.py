@@ -45,9 +45,25 @@ class Translations(unittest.TestCase):
         for lang in ("de", "en"):
             self.assertEqual(used, set(_load(lang)["exceptions"]), lang)
 
-    def test_unit_notification_text(self):
+    def test_notification_texts(self):
+        used = set(re.findall(r'"(unknown_unit|low_salt_one|low_salt|regeneration_overdue)"', _source()))
+        self.assertEqual(used, {"unknown_unit", "low_salt", "low_salt_one", "regeneration_overdue"})
         for lang in ("de", "en"):
-            self.assertEqual(set(_load(lang)["issues"]["unknown_unit"]), {"title", "description"})
+            issues = _load(lang)["issues"]
+            self.assertEqual(set(issues), used, lang)
+            for issue in issues.values():
+                self.assertEqual(set(issue), {"title", "description"})
+
+    def test_clock_mode_options_match_logic(self):
+        with open(os.path.join(BASE, "logic.py"), encoding="utf-8") as fh:
+            modes = set(re.findall(r'^CLOCK_\w+ = "(\w+)"', fh.read(), re.M))
+        self.assertEqual(modes, {"standard", "dst", "manual"})
+        for lang in ("de", "en"):
+            data = _load(lang)
+            self.assertEqual(set(data["selector"]["clock_mode"]["options"]), modes, lang)
+            for section, step in (("config", "user"), ("options", "init")):
+                self.assertIn("clock_mode", data[section]["step"][step]["data"])
+                self.assertIn("clock_mode", data[section]["step"][step]["data_description"])
 
     def test_config_errors_are_reachable(self):
         source = _source()

@@ -13,6 +13,7 @@
           "threshold_l": "Schwellwert Wasserverbrauch",
           "window_start_hour": "Zeitfenster von (Uhr)",
           "window_end_hour": "Zeitfenster bis (Uhr)",
+          "clock_mode": "Uhr der Anlage",
           "warn_remaining": "Warnung bei Restbestand von (Regenerationen)"
         },
         "data_description": {
@@ -21,8 +22,9 @@
           "per_regen_kg": "Wie viel Kilogramm Salz verbraucht eine Regeneration?",
           "initial_stock_kg": "Optional. Leer lassen, wenn der Behälter gerade voll ist.",
           "threshold_l": "Eine Regeneration zählt, wenn im Zeitfenster mehr als diese Menge Wasser verbraucht wird.",
-          "window_start_hour": "Beginn des Zeitfensters, in dem die Regeneration stattfindet (Standard 2 Uhr).",
+          "window_start_hour": "Beginn des Zeitfensters nach der Uhr der Anlage (Standard 2 Uhr).",
           "window_end_hour": "Ende des Zeitfensters (Standard 3 Uhr). Muss nach dem Beginn liegen.",
+          "clock_mode": "Die Anlage stellt ihre Uhr nicht selbst auf Sommer- oder Winterzeit um. Das Zeitfenster gilt nach der Uhr der Anlage: Bleibt sie auf Winterzeit, liegt es im Sommer in Ortszeit eine Stunde später.",
           "warn_remaining": "Ab diesem rechnerischen Restbestand erscheint eine Meldung, bis das Nachfüllen bestätigt wird."
         }
       }
@@ -31,7 +33,8 @@
       "window_invalid": "Das Ende des Zeitfensters muss nach dem Beginn liegen.",
       "per_regen_too_large": "Der Salzverbrauch pro Regeneration darf nicht größer als die Behältergröße sein.",
       "stock_too_large": "Der aktuelle Salzbestand darf nicht größer als die Behältergröße sein.",
-      "invalid_number": "Bitte eine endliche Zahl eingeben."
+      "invalid_number": "Bitte eine endliche Zahl eingeben.",
+      "clock_mode_invalid": "Bitte eine gültige Einstellung für die Uhr der Anlage wählen."
     }
   },
   "options": {
@@ -45,6 +48,7 @@
           "threshold_l": "Schwellwert Wasserverbrauch",
           "window_start_hour": "Zeitfenster von (Uhr)",
           "window_end_hour": "Zeitfenster bis (Uhr)",
+          "clock_mode": "Uhr der Anlage",
           "warn_remaining": "Warnung bei Restbestand von (Regenerationen)"
         },
         "data_description": {
@@ -52,8 +56,9 @@
           "capacity_kg": "Wie viel Kilogramm Salz passen in den Salzbehälter? Ein größerer Bestand wird auf diesen Wert begrenzt.",
           "per_regen_kg": "Wie viel Kilogramm Salz verbraucht eine Regeneration?",
           "threshold_l": "Eine Regeneration zählt, wenn im Zeitfenster mehr als diese Menge Wasser verbraucht wird.",
-          "window_start_hour": "Beginn des Zeitfensters in Ortszeit (Standard 2 Uhr).",
+          "window_start_hour": "Beginn des Zeitfensters nach der Uhr der Anlage (Standard 2 Uhr).",
           "window_end_hour": "Ende des Zeitfensters (Standard 3 Uhr). Muss nach dem Beginn liegen; ausgewertet wird eine Minute danach.",
+          "clock_mode": "Die Anlage stellt ihre Uhr nicht selbst auf Sommer- oder Winterzeit um. Das Zeitfenster gilt nach der Uhr der Anlage: Bleibt sie auf Winterzeit, liegt es im Sommer in Ortszeit eine Stunde später.",
           "warn_remaining": "Ab diesem rechnerischen Restbestand erscheint eine Meldung, bis das Nachfüllen bestätigt wird."
         }
       }
@@ -61,7 +66,8 @@
     "error": {
       "window_invalid": "Das Ende des Zeitfensters muss nach dem Beginn liegen.",
       "per_regen_too_large": "Der Salzverbrauch pro Regeneration darf nicht größer als die Behältergröße sein.",
-      "invalid_number": "Bitte eine endliche Zahl eingeben."
+      "invalid_number": "Bitte eine endliche Zahl eingeben.",
+      "clock_mode_invalid": "Bitte eine gültige Einstellung für die Uhr der Anlage wählen."
     }
   },
   "entity": {
@@ -204,6 +210,18 @@
     "unknown_unit": {
       "title": "Einheit des Wasserzählers unbekannt",
       "description": "Der Wasserzähler {entity} der Enthärtungsanlage „{name}“ meldet die Einheit „{unit}“. Das ist keine bekannte Volumeneinheit (bekannt sind z. B. L, mL, m³, gal, ft³, CCF). Solange das so ist, wird der Zählerstand nicht gezählt und keine Regeneration erkannt.\n\nBitte am Sensor eine Volumeneinheit einstellen oder in den Einstellungen der Integration einen anderen Wasserzähler wählen. Diese Meldung verschwindet, sobald ein Wert mit bekannter Einheit kommt."
+    },
+    "low_salt": {
+      "title": "Salz nachfüllen",
+      "description": "Der rechnerische Salzvorrat der Enthärtungsanlage „{name}“ reicht nur noch für {left} Regenerationen ({stock} kg von {capacity} kg).\n\nBitte Salz nachfüllen und die nachgefüllte Menge in kg bestätigen: Menge bei „Nachgefüllte Salzmenge“ (Gerät „{name}“) eingeben und Taste „Salz nachgefüllt“ drücken, bei vollem Behälter genügt die Taste „Behälter voll“, oder Dienst `water_softener_refill_sensor.refill` mit `kg` aufrufen. Diese Meldung bleibt bestehen, bis eine Menge bestätigt wurde und der Bestand wieder über der Warnschwelle liegt."
+    },
+    "low_salt_one": {
+      "title": "Salz nachfüllen",
+      "description": "Der rechnerische Salzvorrat der Enthärtungsanlage „{name}“ reicht nur noch für {left} Regeneration ({stock} kg von {capacity} kg).\n\nBitte Salz nachfüllen und die nachgefüllte Menge in kg bestätigen: Menge bei „Nachgefüllte Salzmenge“ (Gerät „{name}“) eingeben und Taste „Salz nachgefüllt“ drücken, bei vollem Behälter genügt die Taste „Behälter voll“, oder Dienst `water_softener_refill_sensor.refill` mit `kg` aufrufen. Diese Meldung bleibt bestehen, bis eine Menge bestätigt wurde und der Bestand wieder über der Warnschwelle liegt."
+    },
+    "regeneration_overdue": {
+      "title": "Regeneration überfällig",
+      "description": "Bei der Enthärtungsanlage „{name}“ wurde am Fälligkeitstag ({due}) keine Regeneration erkannt (letzte erkannte Regeneration: {last}). Die Anlage regeneriert spätestens 7 Tage nach der letzten Regeneration.\n\nMögliche Ursachen: Der Wasserzähler war im Zeitfenster nicht verfügbar, die Einstellung „Uhr der Anlage“ passt nicht zur Anlage, oder die Anlage ist gestört. Eine tatsächlich erfolgte Regeneration lässt sich mit dem Dienst `water_softener_refill_sensor.add_regeneration` nachtragen (optional mit Zeitpunkt `datetime`). Diese Meldung verschwindet, sobald wieder eine Regeneration gezählt wird."
     }
   },
   "exceptions": {
@@ -227,6 +245,15 @@
     },
     "invalid_amount": {
       "message": "Die Salzmenge muss eine endliche Zahl sein."
+    }
+  },
+  "selector": {
+    "clock_mode": {
+      "options": {
+        "standard": "Bleibt ganzjährig auf Winterzeit",
+        "dst": "Bleibt ganzjährig auf Sommerzeit",
+        "manual": "Wird nach der Zeitumstellung von Hand umgestellt"
+      }
     }
   }
 }

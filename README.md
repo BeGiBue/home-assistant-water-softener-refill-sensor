@@ -16,7 +16,7 @@ The integration is shown in German when Home Assistant is set to German, and in 
 
 ### How it works
 
-- **Detecting a regeneration:** the softener regenerates at night (e.g. 2–3 am) and uses water. The integration watches the **water meter** (cumulative reading). If more than the **threshold** (default 45 litres) is used within the time window, that counts as **one** regeneration. Evaluation happens one minute after the window ends, so late meter updates still count. The window starts at the set local time and lasts the set hours in real time; on daylight saving nights it matches the softener's clock, which does not change by itself.
+- **Detecting a regeneration:** the softener regenerates at night (e.g. 2–3 am) and uses water. The integration watches the **water meter** (cumulative reading). If more than the **threshold** (default 45 litres) is used within the time window, that counts as **one** regeneration. Evaluation happens one minute after the window ends, so late meter updates still count. The window follows the **softener clock**, which does not switch to daylight saving time by itself (see setting "Softener clock"). A short meter outage or a Home Assistant restart inside the window does not lose the water used meanwhile.
 - **Calculating the salt stock:** you enter how many kilograms the brine tank holds and how much one regeneration uses. Each detected regeneration reduces the calculated stock.
 - **Warning:** when the remaining stock reaches the warning level (default **3 regenerations**), a notification appears. It stays **until you confirm the refill with the amount in kg**: enter it under "Salt amount refilled" and press "Salt refilled", or call `water_softener_refill_sensor.refill` with `kg`. If the tank is completely full, the "Tank full" button is enough.
 
@@ -38,10 +38,11 @@ The integration is shown in German when Home Assistant is set to German, and in 
 | Salt used per regeneration | kg of salt per regeneration | 1.28 kg |
 | Current salt stock | Setup only, optional. Empty = tank full | – |
 | Water use threshold | Use within the window above which a regeneration counts | 45 litres |
-| Time window from / to | When regeneration happens (full hours, end after start) | 2 to 3 am |
+| Time window from / to | When regeneration happens, by the softener clock (full hours, end after start, not across midnight) | 2 to 3 am |
+| Softener clock | The softener does not change its clock by itself: **stays on standard (winter) time** (window is one hour later in local time during summer), **stays on daylight saving time**, or **adjusted by hand** after the time change | Standard time |
 | Warn at remaining stock of | Remaining regenerations at which the notification appears | 3 |
 
-All values except name and initial stock can be changed later with **Configure**. **Starting mid-fill:** after setup, set "Correct last regeneration" and "Correct regenerations since refill" on the device.
+All values except name and initial stock can be changed later with **Configure**. **Updating from 2.1.0 or older:** the softener clock is now assumed to stay on standard time. If you adjust the clock by hand after each time change, choose "adjusted by hand" once under Configure; otherwise the window is one hour off during daylight saving time. **Starting mid-fill:** after setup, set "Correct last regeneration" and "Correct regenerations since refill" on the device.
 
 ### Entities
 
@@ -85,7 +86,7 @@ Die Integration erscheint auf Deutsch, wenn Home Assistant auf Deutsch eingestel
 
 ### So funktioniert es
 
-- **Regeneration erkennen:** Die Anlage regeneriert nachts (z. B. 2–3 Uhr) und verbraucht dabei Wasser. Die Integration überwacht den **Wasserzähler** (kumulierter Stand). Wird im Zeitfenster **mehr als der Schwellwert** (Standard 45 Liter) verbraucht, zählt das als **eine** Regeneration. Ausgewertet wird eine Minute nach Fensterende, verspätete Zählerwerte zählen noch mit. Das Fenster beginnt zur eingestellten Ortszeit und dauert die eingestellten Stunden in echter Zeit; in den Nächten der Zeitumstellung passt es zur Uhr der Anlage, die sich nicht selbst umstellt.
+- **Regeneration erkennen:** Die Anlage regeneriert nachts (z. B. 2–3 Uhr) und verbraucht dabei Wasser. Die Integration überwacht den **Wasserzähler** (kumulierter Stand). Wird im Zeitfenster **mehr als der Schwellwert** (Standard 45 Liter) verbraucht, zählt das als **eine** Regeneration. Ausgewertet wird eine Minute nach Fensterende, verspätete Zählerwerte zählen noch mit. Das Fenster gilt nach der **Uhr der Anlage**, die sich nicht selbst auf Sommerzeit umstellt (siehe Einstellung „Uhr der Anlage“). Ein kurzer Ausfall des Zählers oder ein Neustart von Home Assistant im Fenster verliert den Verbrauch dazwischen nicht.
 - **Salzbestand rechnen:** Du gibst ein, wie viel Kilogramm Salz in den Behälter passen und wie viel eine Regeneration verbraucht. Jede erkannte Regeneration verringert den rechnerischen Bestand.
 - **Warnung:** Erreicht der Restbestand die Warnschwelle (Standard **3 Regenerationen**), erscheint eine Meldung. Sie bleibt, **bis du das Nachfüllen mit der Menge in kg bestätigst**: Menge bei „Nachgefüllte Salzmenge“ eingeben und „Salz nachgefüllt“ drücken, oder `water_softener_refill_sensor.refill` mit `kg` aufrufen. Ist der Behälter ganz voll, genügt die Taste „Behälter voll“.
 
@@ -107,10 +108,11 @@ Die Integration erscheint auf Deutsch, wenn Home Assistant auf Deutsch eingestel
 | Salzverbrauch pro Regeneration | kg Salz je Regeneration | 1,28 kg |
 | Aktueller Salzbestand | Nur beim Einrichten, optional. Leer = Behälter voll | – |
 | Schwellwert Wasserverbrauch | Verbrauch im Zeitfenster, ab dem eine Regeneration zählt | 45 Liter |
-| Zeitfenster von / bis | Wann die Regeneration stattfindet (volle Stunden, Ende nach Beginn) | 2 bis 3 Uhr |
+| Zeitfenster von / bis | Wann die Regeneration stattfindet, nach der Uhr der Anlage (volle Stunden, Ende nach Beginn, nicht über Mitternacht) | 2 bis 3 Uhr |
+| Uhr der Anlage | Die Anlage stellt ihre Uhr nicht selbst um: **bleibt auf Winterzeit** (Fenster im Sommer in Ortszeit eine Stunde später), **bleibt auf Sommerzeit** oder **wird nach der Zeitumstellung von Hand umgestellt** | Winterzeit |
 | Warnung bei Restbestand von | Restbestand in Regenerationen, ab dem die Meldung erscheint | 3 |
 
-Alle Werte außer Name und Anfangsbestand lassen sich später über **Konfigurieren** ändern. **Mitten in einer Füllung starten:** nach der Einrichtung am Gerät „Letzte Regeneration korrigieren“ und „Regenerationen seit Nachfüllen korrigieren“ eintragen.
+Alle Werte außer Name und Anfangsbestand lassen sich später über **Konfigurieren** ändern. **Update von 2.1.0 oder älter:** Die Anlagenuhr bleibt jetzt standardmäßig auf Winterzeit. Wer die Uhr nach jeder Zeitumstellung von Hand umstellt, wählt einmal unter Konfigurieren „wird von Hand umgestellt“; sonst liegt das Fenster in der Sommerzeit eine Stunde daneben. **Mitten in einer Füllung starten:** nach der Einrichtung am Gerät „Letzte Regeneration korrigieren“ und „Regenerationen seit Nachfüllen korrigieren“ eintragen.
 
 ### Entitäten
 

@@ -13,6 +13,7 @@
           "threshold_l": "Water use threshold",
           "window_start_hour": "Time window from (hour)",
           "window_end_hour": "Time window to (hour)",
+          "clock_mode": "Softener clock",
           "warn_remaining": "Warn at remaining stock of (regenerations)"
         },
         "data_description": {
@@ -21,8 +22,9 @@
           "per_regen_kg": "How many kilograms of salt does one regeneration use?",
           "initial_stock_kg": "Optional. Leave empty if the tank is full right now.",
           "threshold_l": "A regeneration counts if more than this amount of water is used within the time window.",
-          "window_start_hour": "Start of the time window in which the regeneration takes place (default 2 am).",
+          "window_start_hour": "Start of the time window by the softener clock (default 2 am).",
           "window_end_hour": "End of the time window (default 3 am). Must be after the start.",
+          "clock_mode": "The softener does not switch its clock to daylight saving time by itself. The time window follows the softener clock: if it stays on standard time, the window is one hour later in local time during summer.",
           "warn_remaining": "From this calculated remaining stock on, a notice is shown until the refill is confirmed."
         }
       }
@@ -31,7 +33,8 @@
       "window_invalid": "The end of the time window must be after its start.",
       "per_regen_too_large": "Salt per regeneration must not exceed the tank capacity.",
       "stock_too_large": "The current salt stock must not exceed the tank capacity.",
-      "invalid_number": "Please enter a finite number."
+      "invalid_number": "Please enter a finite number.",
+      "clock_mode_invalid": "Please choose a valid setting for the softener clock."
     }
   },
   "options": {
@@ -45,6 +48,7 @@
           "threshold_l": "Water use threshold",
           "window_start_hour": "Time window from (hour)",
           "window_end_hour": "Time window to (hour)",
+          "clock_mode": "Softener clock",
           "warn_remaining": "Warn at remaining stock of (regenerations)"
         },
         "data_description": {
@@ -52,8 +56,9 @@
           "capacity_kg": "How many kilograms of salt fit into the salt tank? A larger stock is limited to this value.",
           "per_regen_kg": "How many kilograms of salt does one regeneration use?",
           "threshold_l": "A regeneration counts if more than this amount of water is used within the time window.",
-          "window_start_hour": "Start of the time window in local time (default 2 o'clock).",
+          "window_start_hour": "Start of the time window by the softener clock (default 2 am).",
           "window_end_hour": "End of the time window (default 3 o'clock). Must be after the start; evaluated one minute later.",
+          "clock_mode": "The softener does not switch its clock to daylight saving time by itself. The time window follows the softener clock: if it stays on standard time, the window is one hour later in local time during summer.",
           "warn_remaining": "From this calculated remaining stock on, a notification appears until the refill is confirmed."
         }
       }
@@ -61,7 +66,8 @@
     "error": {
       "window_invalid": "The end of the time window must be after its start.",
       "per_regen_too_large": "Salt per regeneration must not exceed the tank capacity.",
-      "invalid_number": "Please enter a finite number."
+      "invalid_number": "Please enter a finite number.",
+      "clock_mode_invalid": "Please choose a valid setting for the softener clock."
     }
   },
   "entity": {
@@ -204,6 +210,18 @@
     "unknown_unit": {
       "title": "Unknown unit of the water meter",
       "description": "The water meter {entity} of the water softener “{name}” reports the unit “{unit}”. This is not a known volume unit (known are e.g. L, mL, m³, gal, ft³, CCF). As long as this is the case, the meter reading is not counted and no regeneration is detected.\n\nPlease set a volume unit on the sensor or choose another water meter in the integration settings. This notice disappears as soon as a value with a known unit arrives."
+    },
+    "low_salt": {
+      "title": "Refill salt",
+      "description": "The calculated salt stock of the water softener “{name}” only lasts for {left} more regenerations ({stock} kg of {capacity} kg).\n\nPlease refill salt and confirm the amount in kg: enter it at “Salt amount refilled” (device “{name}”) and press the button “Salt refilled”, press “Tank full” if the tank is full, or call the service `water_softener_refill_sensor.refill` with `kg`. This notice stays until an amount is confirmed and the stock is above the warning threshold again."
+    },
+    "low_salt_one": {
+      "title": "Refill salt",
+      "description": "The calculated salt stock of the water softener “{name}” only lasts for {left} more regeneration ({stock} kg of {capacity} kg).\n\nPlease refill salt and confirm the amount in kg: enter it at “Salt amount refilled” (device “{name}”) and press the button “Salt refilled”, press “Tank full” if the tank is full, or call the service `water_softener_refill_sensor.refill` with `kg`. This notice stays until an amount is confirmed and the stock is above the warning threshold again."
+    },
+    "regeneration_overdue": {
+      "title": "Regeneration overdue",
+      "description": "No regeneration was detected for the water softener “{name}” on the due day ({due}) (last detected regeneration: {last}). The softener regenerates at the latest 7 days after the last regeneration.\n\nPossible causes: the water meter was unavailable during the time window, the setting “Softener clock” does not match the softener, or the softener is faulty. A regeneration that did take place can be added with the service `water_softener_refill_sensor.add_regeneration` (optionally with the time `datetime`). This notice disappears as soon as a regeneration is counted again."
     }
   },
   "exceptions": {
@@ -227,6 +245,15 @@
     },
     "invalid_amount": {
       "message": "The salt amount must be a finite number."
+    }
+  },
+  "selector": {
+    "clock_mode": {
+      "options": {
+        "standard": "Stays on standard (winter) time all year",
+        "dst": "Stays on daylight saving (summer) time all year",
+        "manual": "Is adjusted by hand after the time change"
+      }
     }
   }
 }

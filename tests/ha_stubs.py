@@ -120,6 +120,7 @@ class FakeStore:
 
 class FakeCoordinator:
     def __init__(self, hass, logger, *, config_entry=None, name=None, update_method=None, **kw):
+        self.hass = hass
         self.data = None
         self.updates = 0
         self.update_method = update_method
@@ -249,6 +250,8 @@ def _track_point(hass, action, point):
 def install() -> None:
     """Attrappen registrieren (vor dem Import der Integration aufrufen)."""
     sys.meta_path.append(_Finder())
+    # Auch wenn das echte voluptuous installiert ist (Umgebung der tests_ha), gilt hier die Attrappe
+    _module("voluptuous")
     _module("homeassistant")
     _module(
         "homeassistant.const",

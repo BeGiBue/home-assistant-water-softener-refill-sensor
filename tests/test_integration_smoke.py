@@ -96,6 +96,7 @@ class FakeEntry:
             "window_start_hour": 2,
             "window_end_hour": 3,
             "warn_remaining": 3,
+            "clock_mode": "manual",  # die Abläufe hier beschreiben die von Hand umgestellte Uhr
         }
         self.data.update(data)
         self.options = {}
@@ -310,10 +311,12 @@ class NightScenario(unittest.TestCase):
         hass.states.set("sensor.wasser_total", FakeState("1.000", "m³", local(5, 21)))
         await async_setup_entry(hass, entry)
         mgr = hass.data["water_softener_refill_sensor"]["abc123"]
-        push(hass, 1.010, local(6, 2, 10), unit="m³")  # +10 L
-        push(hass, "unavailable", local(6, 2, 20), unit="m³")  # Zähler fällt aus
-        push(hass, 1.300, local(6, 2, 30), unit="m³")  # +290 L, aber nach Ausfall nur Bezugswert
-        push(hass, 1.346, local(6, 2, 50), unit="m³")  # +46 L
+        push(hass, "unavailable", local(6, 1, 50), unit="m³")  # Zähler fällt vor dem Fenster aus
+        push(hass, 1.300, local(6, 2, 10), unit="m³")  # +300 L seit 21 Uhr: Lücke begann vor dem Fenster, nur Bezugswert
+        push(hass, 1.310, local(6, 2, 15), unit="m³")  # +10 L
+        push(hass, "unavailable", local(6, 2, 20), unit="m³")  # Zähler fällt im Fenster kurz aus
+        push(hass, 1.340, local(6, 2, 30), unit="m³")  # +30 L: die Lücke liegt ganz im Fenster und zählt
+        push(hass, 1.356, local(6, 2, 50), unit="m³")  # +16 L
         window_end(hass, local(6, 3, 1))
         self.assertEqual(mgr.coordinator.data["window_usage_l"], 56.0)
         self.assertEqual(mgr.coordinator.data["total_regenerations"], 1)
@@ -578,6 +581,124 @@ class ReviewFixes(unittest.TestCase):
             window_end(self.hass, local(6, 3, 1))
             self.assertEqual(mgr2.coordinator.data["total_regenerations"], 1)
         self.run_async(run())
+
+
+class Release220(unittest.TestCase):
+    """2.2.0: Uhr der Anlage, Lücken im Fenster, robuster Zeitplan, Meldungstexte aus den Übersetzungen."""
+
+    def setUp(self):
+        FakeStore.DATA.clear()
+        FakeNotifications.active.clear()
+        FakeNotifications.log.clear()
+        self.hass = FakeHass()
+        self.entry = FakeEntry(capacity_kg=100.0)
+        FakeDt._now = local(5, 22)
+        self.hass.states.set("sensor.wasser_total", FakeState("1000", "L", local(5, 21)))
+
+    async def _setup(self):
+        await async_setup(self.hass, {})
+        await async_setup_entry(self.hass, self.entry)
+        return self.hass.data["water_softener_refill_sensor"]["abc123"]
+
+    def test_clock_mode_defaults_to_standard_time(self):
+        from custom_components.water_softener_refill_sensor.manager import settings_from_entry
+
+        entry = FakeEntry()
+        self.assertEqual(settings_from_entry(entry).clock_mode, "manual")
+        del entry.data["clock_mode"]  # bestehende Einrichtung ohne die neue Option
+        self.assertEqual(settings_from_entry(entry).clock_mode, "standard")
+        entry.options = {"clock_mode": "unsinn"}
+        self.assertEqual(settings_from_entry(entry).clock_mode, "standard")
+        entry.options = {"clock_mode": "dst"}
+        self.assertEqual(settings_from_entry(entry).clock_mode, "dst")
+
+    def test_standard_clock_in_summer_time_counts_three_to_four(self):
+        async def run():
+            del self.entry.data["clock_mode"]
+            mgr = await self._setup()
+            # Oktober vor der Umstellung (MESZ): Fenster 03:00–04:00 Ortszeit, Auswertung 04:01
+            self.assertEqual([t[0] for t in self.hass.timers], [local(6, 4, 1).astimezone(ZoneInfo("UTC"))])
+            push(self.hass, 1060, local(6, 2, 30))  # 02:30 MESZ: vor dem Fenster
+            push(self.hass, 1112, local(6, 3, 30))
+            window_end(self.hass, local(6, 4, 1))
+            self.assertEqual(mgr.coordinator.data["window_usage_l"], 52.0)
+            self.assertEqual(mgr.coordinator.data["total_regenerations"], 1)
+        asyncio.run(run())
+
+    def test_restart_inside_window_keeps_consumption(self):
+        async def run():
+            mgr = await self._setup()
+            push(self.hass, 1010, local(6, 2, 5))
+            await mgr.async_stop()  # Neustart im Fenster; währenddessen laufen 42 L durch
+            hass2 = FakeHass()
+            hass2.states.set("sensor.wasser_total", FakeState("1052", "L", local(6, 2, 40)))
+            FakeDt._now = local(6, 2, 40)
+            await async_setup_entry(hass2, self.entry)
+            mgr2 = hass2.data["water_softener_refill_sensor"]["abc123"]
+            self.assertEqual(mgr2.model.state.window_usage_l, 52.0)
+            window_end(hass2, local(6, 3, 1))
+            self.assertEqual(mgr2.coordinator.data["total_regenerations"], 1)
+        asyncio.run(run())
+
+    def test_failed_evaluation_keeps_the_schedule(self):
+        async def run():
+            mgr = await self._setup()
+
+            def broken(*args, **kwargs):
+                raise RuntimeError("kaputt")
+
+            original = mgr.model.evaluate_pending
+            mgr.model.evaluate_pending = broken
+            with self.assertLogs("custom_components.water_softener_refill_sensor.manager", level="ERROR"):
+                window_end(self.hass, local(6, 3, 1))
+            self.assertEqual([t[0] for t in self.hass.timers], [local(7, 3, 1).astimezone(ZoneInfo("UTC"))])
+            mgr.model.evaluate_pending = original
+        asyncio.run(run())
+
+    def test_failed_start_leaves_no_listeners_and_saves_nothing(self):
+        async def run():
+            await async_setup(self.hass, {})
+            original = SoftenerManager._publish
+
+            def broken(self):
+                raise RuntimeError("kaputt")
+
+            SoftenerManager._publish = broken
+            try:
+                with self.assertRaises(RuntimeError):
+                    await async_setup_entry(self.hass, self.entry)
+            finally:
+                SoftenerManager._publish = original
+            self.assertEqual(self.hass.timers, [])
+            self.assertEqual(self.hass.data.get("water_softener_refill_sensor", {}), {})
+            self.assertEqual(FakeStore.DATA, {})
+        asyncio.run(run())
+
+    def test_english_overdue_text_uses_iso_date(self):
+        async def run():
+            self.hass.config.language = "en"
+            mgr = await self._setup()
+            await mgr.async_set_last_regeneration(local(5, 2, 30))
+            window_end(self.hass, local(12, 3, 1))
+            note = FakeNotifications.active["water_softener_refill_sensor_abc123_overdue"]
+            self.assertEqual(note["title"], "Regeneration overdue")
+            self.assertIn("on the due day (2026-10-12)", note["message"])
+            self.assertIn("last detected regeneration: 2026-10-05 02:30", note["message"])
+        asyncio.run(run())
+
+    def test_single_remaining_regeneration_text(self):
+        async def run():
+            mgr = await self._setup()
+            await mgr.async_set_stock(4.0)  # 4 kg je Regeneration → Restbestand 1
+            note = FakeNotifications.active["water_softener_refill_sensor_abc123_low_salt"]
+            self.assertIn("nur noch für 1 Regeneration (", note["message"])
+        asyncio.run(run())
+
+    def test_invalid_clock_mode_is_rejected(self):
+        data = {"capacity_kg": 25.0, "per_regen_kg": 1.5, "window_start_hour": 2, "window_end_hour": 3}
+        self.assertEqual(config_flow._validate({**data, "clock_mode": "unsinn"}), {"base": "clock_mode_invalid"})
+        self.assertEqual(config_flow._validate({**data, "clock_mode": "dst"}), {})
+        self.assertEqual(config_flow._validate(data), {})
 
 
 class ConfigFlowHelpers(unittest.TestCase):
