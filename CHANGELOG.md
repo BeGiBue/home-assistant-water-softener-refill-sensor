@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.2.1
+
+- Maintenance: test and build tools updated, no functional changes. / Wartung: Test- und Build-Werkzeuge aktualisiert, keine Änderungen an der Funktion.
+
 ## 2.2.0
 
 - New setting "Softener clock": stays on standard (winter) time, stays on daylight saving time, or adjusted by hand. / Neue Einstellung „Uhr der Anlage“: bleibt auf Winterzeit, bleibt auf Sommerzeit oder wird von Hand umgestellt.
