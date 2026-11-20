@@ -30,7 +30,7 @@ jobs:
       SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
       GH_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           ref: ${{ env.SHA }}
       - name: Validierung prüfen (nur bei manuellem Start)
@@ -63,7 +63,7 @@ jobs:
             echo "Kein Abschnitt „## ${VERSION}“ mit Inhalt in CHANGELOG.md, kein Release." >&2
             exit 1
           fi
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         if: steps.v.outputs.exists == 'false'
         with:
           tag_name: v${{ steps.v.outputs.version }}
