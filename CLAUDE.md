@@ -25,7 +25,7 @@ Enthärtungsanlage über den Wasserzähler und rechnet den Salzbestand mit. Zuge
 2. Nach jeder Änderung `python3 -m unittest discover -s tests -v` ausführen. `tests/test_integration_smoke.py` nutzt
    Attrappen der HA-Schnittstellen (`tests/ha_stubs.py`): sie prüfen den eigenen Ablauf, **nicht** die echte HA-API.
    **Maßgeblich** für die Anbindung sind die Tests mit echtem Home Assistant in `tests_ha/`
-   (`pip install -r requirements_test.txt`, dann `python3 -m pytest`; die CI prüft 2024.12 und 2026.2). Bei Änderungen
+   (`pip install -r requirements_test.txt`, dann `python3 -m pytest`; die CI prüft 2024.12 und 2026.10). Bei Änderungen
    an HA-Schnittstellen (Imports, Basisklassen, Signaturen, Formulare) dort einen Test ergänzen. Die Attrappen liefern nur
    Module aus `ALLOWED_MODULES` in `tests/ha_stubs.py`; ein neues HA-Modul dort bewusst ergänzen.
 3. Das Speicherformat (`Store`, Version 1) nicht brechen: neue Felder in `State`/`from_dict` mit Standardwert ergänzen.
